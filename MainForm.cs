@@ -8,10 +8,16 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
-using WordToJsonParser;
 
 namespace WordToJsonParser
 {
+    // 🌟 ساختار یکپارچه خروجی JSON (نرمال‌سازی داده‌ها)
+    public class BookExportData
+    {
+        public List<PageData> Pages { get; set; } = new List<PageData>();
+        public List<ParagraphData> AudioScripts { get; set; } = new List<ParagraphData>();
+    }
+
     public partial class MainForm : Form
     {
         public MainForm()
@@ -124,10 +130,14 @@ namespace WordToJsonParser
 
                     if (element is Paragraph paragraph)
                     {
-                        // 🌟 استفاده از موتور جستجوی دقیق استایل
                         bool isBlankWord2 = IsTargetStyle(paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value, wordDoc.MainDocumentPart, "BlankWord2");
 
                         var paraDataList = ParseParagraph(paragraph, wordDoc.MainDocumentPart, resolver, outputDir, false);
+
+                        // 🌟 فیلتر پاراگراف‌های زباله: حذف پاراگراف‌هایی که فقط کاراکترهای \n یا فضای خالی دارند
+                        paraDataList.RemoveAll(p =>
+                            p.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
+                            p.StartMs == null);
 
                         if (paraDataList.Count > 0)
                         {
@@ -168,11 +178,19 @@ namespace WordToJsonParser
 
                     var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, false);
 
-                    audioScripts.AddRange(parsedParas);
+                    // 🌟 فیلتر پاراگراف‌های زباله و نامرئی
+                    parsedParas.RemoveAll(pr =>
+                        pr.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
+                        pr.StartMs == null);
 
-                    if (isBlankWord2)
+                    if (parsedParas.Count > 0)
                     {
-                        foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
+                        audioScripts.AddRange(parsedParas);
+
+                        if (isBlankWord2)
+                        {
+                            foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
+                        }
                     }
                 }
             }
@@ -181,17 +199,15 @@ namespace WordToJsonParser
         }
 
         // ==========================================
-        // 🌟 موتور قدرتمند و دقیق برای جستجوی نام استایل
+        // موتور قدرتمند برای جستجوی نام استایل
         // ==========================================
         private bool IsTargetStyle(string styleId, MainDocumentPart mainPart, string targetName)
         {
             if (string.IsNullOrEmpty(styleId)) return false;
 
-            // ابتدا نام مستقیم (بدون فاصله) را چک می‌کند
             if (styleId.Replace(" ", "").Equals(targetName, StringComparison.OrdinalIgnoreCase))
                 return true;
 
-            // در صورتی که ورد نام را تغییر داده باشد، نام واقعی را از ریشه می‌خواند
             var stylesPart = mainPart.StyleDefinitionsPart;
             if (stylesPart?.Styles != null)
             {
@@ -218,7 +234,7 @@ namespace WordToJsonParser
                 var merged = CloneParagraphProperties(group[0]);
                 merged.Spans = new List<SpanData>();
                 string combinedText = "";
-                var nonTextSpans = new List<SpanData>(); // برای حفظ تصاویر و جداول داخل جای‌خالی
+                var nonTextSpans = new List<SpanData>();
 
                 foreach (var p in group)
                 {
@@ -234,7 +250,6 @@ namespace WordToJsonParser
 
                 combinedText = "{blk}" + combinedText.TrimEnd('\n') + "{/blk}";
 
-                // گرفتن استایل‌های اولین کلمه تا رنگ و فونت پاراگراف از بین نرود
                 var firstTextSpan = group.SelectMany(p => p.Spans).FirstOrDefault(s => s.Type == "text");
                 if (firstTextSpan != null)
                 {
@@ -247,7 +262,6 @@ namespace WordToJsonParser
                     merged.Spans.Add(new SpanData { Type = "text", Content = combinedText });
                 }
 
-                // بازگرداندن تصاویر و جداول به پاراگراف
                 merged.Spans.AddRange(nonTextSpans);
 
                 merged.StartMs = group.First().StartMs;
@@ -343,6 +357,16 @@ namespace WordToJsonParser
 
                 if (p.ParagraphProperties.SectionProperties != null)
                     _currentSection++;
+
+                // 🌟 اضافه شده: پاک کردن رنگ و حاشیه بصری برای BlankWord2
+                bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
+                if (isBlankWord2)
+                {
+                    basePara.FillColor = null;
+                    basePara.HasBorders = null;
+                    basePara.BorderColor = null;
+                    basePara.BorderStyle = null;
+                }
             }
 
             SpanData lastTextSpan = null;
@@ -463,7 +487,8 @@ namespace WordToJsonParser
                         else
                             newSpan.Content = part;
 
-                        if (!string.IsNullOrWhiteSpace(newSpan.Content) || newSpan.Content == "\n")
+                        // فقط در صورتی اضافه کن که کاملاً خالی نباشد
+                        if (!string.IsNullOrEmpty(newSpan.Content))
                             currentPara.Spans.Add(newSpan);
                     }
                 }
@@ -483,14 +508,24 @@ namespace WordToJsonParser
             if (result.Count == 0)
                 result.Add(basePara);
 
-            // پاک‌سازی تگ‌های چسبیده (برای زمان‌هایی که اسپن‌ها توسط غلط‌یاب ورد شکسته شده‌اند)
+            // ==========================================
+            // 🌟 موتور پاک‌سازی (Garbage Collector) اسپن‌ها
+            // ==========================================
             foreach (var rPara in result)
             {
-                foreach (var span in rPara.Spans)
+                for (int i = rPara.Spans.Count - 1; i >= 0; i--)
                 {
-                    if (span.Type == "text" && !string.IsNullOrEmpty(span.Content))
+                    var span = rPara.Spans[i];
+                    if (span.Type == "text" && span.Content != null)
                     {
+                        // ۱. اصلاح تگ‌های به هم چسبیده
                         span.Content = span.Content.Replace("{/blk}{blk}", "");
+
+                        // ۲. اگر بعد از حذف تگ‌ها، محتوای اسپن کاملاً خالی ("") شد، کل شیء Span را پاک کن!
+                        if (string.IsNullOrEmpty(span.Content))
+                        {
+                            rPara.Spans.RemoveAt(i);
+                        }
                     }
                 }
             }
@@ -548,7 +583,7 @@ namespace WordToJsonParser
 
             if (IsAllCaps(run.RunProperties, runStyleId, pStyleId, mainPart)) runText = runText.ToUpper();
 
-            // 🌟 تله‌گذاری ایمن برای BlankWord1
+            // تله‌گذاری ایمن برای BlankWord1
             bool isBlankWord1 = IsTargetStyle(runStyleId, mainPart, "BlankWord1");
             if (isBlankWord1)
             {
@@ -581,7 +616,16 @@ namespace WordToJsonParser
                 if (runBorderColor == "auto" || string.IsNullOrEmpty(runBorderColor)) runBorderColor = "000000";
                 runBorderStyle = rBorder.Val.Value.ToString();
             }
-
+            // 🌟 مسدود کردن نشت رنگ و حاشیه برای کلمات جای‌خالی (BlankWord1) و پاراگراف‌های والد (BlankWord2)
+            bool isParentBlankWord2 = IsTargetStyle(pStyleId, mainPart, "BlankWord2");
+            if (isBlankWord1 || isParentBlankWord2)
+            {
+                runShading = null;
+                runHasBorders = null;
+                runBorderColor = null;
+                runBorderStyle = null;
+                runTextColor = null; // برای خنثی کردن رنگ متن کاراکترها
+            }
             if (lastTextSpan != null && lastTextSpan.Type == "text" &&
                 lastTextSpan.Url == hyperlinkUrl &&
                 lastTextSpan.Markers.SequenceEqual(currentMarkers) &&
@@ -668,10 +712,14 @@ namespace WordToJsonParser
 
                     foreach (var p in cell.Elements<Paragraph>())
                     {
-                        // 🌟 پشتیبانی از BlankWord2 داخل سلول‌های جدول
                         bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
 
                         var cellParaDataList = ParseParagraph(p, mainPart, resolver, outputDir, true);
+
+                        // فیلتر پاراگراف‌های نامرئی داخل جدول
+                        cellParaDataList.RemoveAll(pr =>
+                            pr.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
+                            pr.StartMs == null);
 
                         if (cellParaDataList.Count > 0)
                         {
@@ -683,7 +731,6 @@ namespace WordToJsonParser
                         }
                     }
 
-                    // 🌟 ادغام پاراگراف‌های جدول در صورت نیاز
                     cellData.Paragraphs = MergeBlankWord2Paragraphs(cellData.Paragraphs);
 
                     rowData.Cells.Add(cellData);
@@ -954,12 +1001,6 @@ namespace WordToJsonParser
             var runStyleId = rPr?.RunStyle?.Val?.Value;
             var pStyleId = pPr?.ParagraphStyleId?.Val?.Value;
 
-            if (!string.IsNullOrEmpty(runStyleId))
-            {
-                string styleLower = runStyleId.ToLower();
-                if (styleLower.Contains("blankword") || styleLower.Contains("blank")) markers.Add("blank");
-            }
-
             if (IsBold(rPr, runStyleId, pStyleId, mainPart)) markers.Add("b");
             if (IsItalic(rPr, runStyleId, pStyleId, mainPart)) markers.Add("i");
 
@@ -1086,7 +1127,6 @@ namespace WordToJsonParser
                 return null;
             }
         }
-
         private Dictionary<string, string> ExtractTableProperties(Table table, MainDocumentPart mainPart)
         {
             var props = new Dictionary<string, string>();
@@ -1254,11 +1294,4 @@ namespace WordToJsonParser
             return props;
         }
     }
-}
-
-// 🌟 ساختار یکپارچه خروجی JSON (نرمال‌سازی داده‌ها)
-public class BookExportData
-{
-    public List<PageData> Pages { get; set; } = new List<PageData>();
-    public List<ParagraphData> AudioScripts { get; set; } = new List<ParagraphData>();
 }
