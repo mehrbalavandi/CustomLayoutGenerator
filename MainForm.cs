@@ -233,35 +233,58 @@ namespace WordToJsonParser
 
                 var merged = CloneParagraphProperties(group[0]);
                 merged.Spans = new List<SpanData>();
-                string combinedText = "";
                 var nonTextSpans = new List<SpanData>();
 
-                foreach (var p in group)
+                var blankParentSpan = new SpanData
                 {
+                    Type = "text",
+                    InnerSpans = new List<SpanData>()
+                };
+
+                string combinedRawText = "";
+
+                for (int i = 0; i < group.Count; i++)
+                {
+                    var p = group[i];
                     foreach (var span in p.Spans)
                     {
                         if (span.Type == "text")
-                            combinedText += span.Content;
+                        {
+                            var cleanSpan = CloneSpan(span);
+                            if (!string.IsNullOrEmpty(cleanSpan.Content))
+                            {
+                                cleanSpan.Content = cleanSpan.Content.Replace("{blk}", "").Replace("{/blk}", "");
+                                blankParentSpan.InnerSpans.Add(cleanSpan);
+                                combinedRawText += cleanSpan.Content;
+                            }
+                        }
                         else
+                        {
                             nonTextSpans.Add(span);
+                        }
                     }
-                    combinedText += "\n";
+
+                    if (i < group.Count - 1)
+                    {
+                        blankParentSpan.InnerSpans.Add(new SpanData { Type = "text", Content = "\n" });
+                        combinedRawText += "\n";
+                    }
                 }
 
-                combinedText = "{blk}" + combinedText.TrimEnd('\n') + "{/blk}";
+                blankParentSpan.Content = "{blk}" + combinedRawText + "{/blk}";
 
-                var firstTextSpan = group.SelectMany(p => p.Spans).FirstOrDefault(s => s.Type == "text");
+                var firstTextSpan = blankParentSpan.InnerSpans.FirstOrDefault();
                 if (firstTextSpan != null)
                 {
-                    var newSpan = CloneSpan(firstTextSpan);
-                    newSpan.Content = combinedText;
-                    merged.Spans.Add(newSpan);
-                }
-                else
-                {
-                    merged.Spans.Add(new SpanData { Type = "text", Content = combinedText });
+                    // 🌟 اصلاح شد: مارکرهای ساختاری متنی مثل b، i و u فیلتر می‌شوند تا به کل دکمه والد ارث نرسند
+                    blankParentSpan.Markers = firstTextSpan.Markers != null
+                        ? firstTextSpan.Markers.Where(m => m != "b" && m != "i" && m != "u").ToList()
+                        : new List<string>();
+                    blankParentSpan.FillColor = firstTextSpan.FillColor;
+                    blankParentSpan.TextColor = firstTextSpan.TextColor;
                 }
 
+                merged.Spans.Add(blankParentSpan);
                 merged.Spans.AddRange(nonTextSpans);
 
                 merged.StartMs = group.First().StartMs;
