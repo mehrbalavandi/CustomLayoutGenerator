@@ -654,7 +654,7 @@ namespace WordToJsonParser
             }
         }
 
-        public SpanData ParseTable(Table table, MainDocumentPart mainPart, FontResolver resolver, string outputDir)
+        public SpanData ParseTable0(Table table, MainDocumentPart mainPart, FontResolver resolver, string outputDir)
         {
             var tableSpan = new SpanData { Type = "table" };
             var tableProps = ExtractTableProperties(table, mainPart);
@@ -728,6 +728,103 @@ namespace WordToJsonParser
                             {
                                 foreach (var cp in cellParaDataList) _blankWord2Set.Add(cp);
                             }
+                        }
+                    }
+
+                    cellData.Paragraphs = MergeBlankWord2Paragraphs(cellData.Paragraphs);
+
+                    rowData.Cells.Add(cellData);
+                }
+                tableSpan.TableRows.Add(rowData);
+            }
+
+            return tableSpan;
+        }
+        public SpanData ParseTable(Table table, MainDocumentPart mainPart, FontResolver resolver, string outputDir)
+        {
+            var tableSpan = new SpanData { Type = "table" };
+            var tableProps = ExtractTableProperties(table, mainPart);
+
+            if (tableProps.ContainsKey("shading")) tableSpan.FillColor = tableProps["shading"];
+            if (tableProps.ContainsKey("tableStyleName")) tableSpan.TableStyleName = tableProps["tableStyleName"];
+            if (tableProps.ContainsKey("tableStyleId")) tableSpan.TableStyleId = tableProps["tableStyleId"];
+            if (tableProps.ContainsKey("alignment")) tableSpan.TableAlignment = tableProps["alignment"];
+            if (tableProps.ContainsKey("hasBorders")) tableSpan.HasBorders = tableProps["hasBorders"];
+            if (tableProps.ContainsKey("borderColor")) tableSpan.BorderColor = tableProps["borderColor"];
+
+            if (tableProps.ContainsKey("borderWidth") && double.TryParse(tableProps["borderWidth"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bw))
+                tableSpan.BorderWidth = bw;
+
+            if (tableProps.ContainsKey("tableWidthPercent") && double.TryParse(tableProps["tableWidthPercent"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double twp))
+                tableSpan.TableWidthPercent = twp;
+
+            var gridCols = table.Elements<TableGrid>().FirstOrDefault()?.Elements<GridColumn>().ToList();
+            List<double> columnWidths = new List<double>();
+            double totalTableWidth = 0;
+
+            if (gridCols != null)
+            {
+                foreach (var col in gridCols)
+                {
+                    double w = 0;
+                    if (col.Width != null && double.TryParse(col.Width.Value, out double parsedWidth)) w = parsedWidth;
+                    columnWidths.Add(w);
+                    totalTableWidth += w;
+                }
+            }
+
+            foreach (var row in table.Elements<TableRow>())
+            {
+                var rowData = new TableRowData();
+                var trPr = row.TableRowProperties;
+                if (trPr != null && trPr.Elements<TableHeader>().Any()) rowData.IsHeader = true;
+
+                var cells = row.Elements<TableCell>().ToList();
+                for (int i = 0; i < cells.Count; i++)
+                {
+                    var cell = cells[i];
+                    var cellData = new TableCellData();
+
+                    if (rowData.IsHeader) cellData.IsHeaderCell = true;
+
+                    if (totalTableWidth > 0 && i < columnWidths.Count)
+                        cellData.WidthPercent = Math.Round((columnWidths[i] / totalTableWidth) * 100, 2);
+
+                    var cellProps = ExtractCellProperties(cell);
+                    if (cellProps.ContainsKey("shading")) cellData.FillColor = cellProps["shading"];
+                    if (cellProps.ContainsKey("vAlign")) cellData.VAlign = cellProps["vAlign"];
+                    if (cellProps.ContainsKey("colSpan")) cellData.ColSpan = int.Parse(cellProps["colSpan"]);
+                    if (cellProps.ContainsKey("rowMerge")) cellData.RowMerge = cellProps["rowMerge"];
+
+                    // 🌟 بررسی تمام فرزندان سلول (پاراگراف و جدول‌های تودرتو)
+                    foreach (var element in cell.Elements())
+                    {
+                        if (element is Paragraph p)
+                        {
+                            bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
+
+                            var cellParaDataList = ParseParagraph(p, mainPart, resolver, outputDir, true);
+
+                            cellParaDataList.RemoveAll(pr =>
+                                pr.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
+                                pr.StartMs == null);
+
+                            if (cellParaDataList.Count > 0)
+                            {
+                                cellData.Paragraphs.AddRange(cellParaDataList);
+                                if (isBlankWord2)
+                                {
+                                    foreach (var cp in cellParaDataList) _blankWord2Set.Add(cp);
+                                }
+                            }
+                        }
+                        else if (element is Table nestedTable)
+                        {
+                            // 🌟 استخراج بازگشتی جدول‌های تودرتو
+                            var nestedTableSpan = ParseTable(nestedTable, mainPart, resolver, outputDir);
+                            var nestedPara = new ParagraphData();
+                            nestedPara.Spans.Add(nestedTableSpan);
+                            cellData.Paragraphs.Add(nestedPara);
                         }
                     }
 
