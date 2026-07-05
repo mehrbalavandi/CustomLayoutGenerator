@@ -280,8 +280,9 @@ namespace WordToJsonParser
                     blankParentSpan.Markers = firstTextSpan.Markers != null
                         ? firstTextSpan.Markers.Where(m => m != "b" && m != "i" && m != "u").ToList()
                         : new List<string>();
-                    blankParentSpan.FillColor = firstTextSpan.FillColor;
-                    blankParentSpan.TextColor = firstTextSpan.TextColor;
+                    // 🌟 هر دو مقدار رنگ متن و رنگ پس‌زمینه را از دکمه والد می‌گیریم
+                    blankParentSpan.FillColor = null;
+                    blankParentSpan.TextColor = null;
                 }
 
                 merged.Spans.Add(blankParentSpan);
@@ -656,11 +657,11 @@ namespace WordToJsonParser
             bool isParentBlankWord2 = IsTargetStyle(pStyleId, mainPart, "BlankWord2");
             if (isBlankWord1 || isParentBlankWord2)
             {
-                runShading = null;
+                // runShading = null; // 🌟 این خط حذف/کامنت شد تا FillColor از بین نرود
                 runHasBorders = null;
                 runBorderColor = null;
                 runBorderStyle = null;
-                runTextColor = null; // برای خنثی کردن رنگ متن کاراکترها
+                //runTextColor = null; // برای خنثی کردن رنگ متن کاراکترها
             }
             if (lastTextSpan != null && lastTextSpan.Type == "text" &&
                 lastTextSpan.Url == hyperlinkUrl &&
