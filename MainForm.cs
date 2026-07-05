@@ -326,6 +326,19 @@ namespace WordToJsonParser
                 if (justification != null)
                     basePara.Alignment = justification.Val.Value.ToString().Substring(0, 1).ToUpper();
 
+                // 🌟 استخراج دقیق تورفتگی‌های پاراگراف (Indentation)
+                if (p.ParagraphProperties.Indentation != null)
+                {
+                    var ind = p.ParagraphProperties.Indentation;
+                    if (ind.Left != null && double.TryParse(ind.Left.Value, out double lTwips)) basePara.IndentLeft = lTwips / 20.0;
+                    if (ind.Right != null && double.TryParse(ind.Right.Value, out double rTwips)) basePara.IndentRight = rTwips / 20.0;
+
+                    // تورفتگی خط اول (First Line)
+                    if (ind.FirstLine != null && double.TryParse(ind.FirstLine.Value, out double flTwips)) basePara.IndentFirstLine = flTwips / 20.0;
+                    // اگر تورفتگی معکوس (Hanging) باشد، آن را به عنوان تورفتگی خط اول منفی در نظر می‌گیریم
+                    else if (ind.Hanging != null && double.TryParse(ind.Hanging.Value, out double hTwips)) basePara.IndentFirstLine = -(hTwips / 20.0);
+                }
+
                 var pShading = p.ParagraphProperties.Shading?.Fill?.Value;
                 if (!string.IsNullOrEmpty(pShading) && pShading != "auto")
                 {
@@ -677,92 +690,6 @@ namespace WordToJsonParser
             }
         }
 
-        public SpanData ParseTable0(Table table, MainDocumentPart mainPart, FontResolver resolver, string outputDir)
-        {
-            var tableSpan = new SpanData { Type = "table" };
-            var tableProps = ExtractTableProperties(table, mainPart);
-
-            if (tableProps.ContainsKey("shading")) tableSpan.FillColor = tableProps["shading"];
-            if (tableProps.ContainsKey("tableStyleName")) tableSpan.TableStyleName = tableProps["tableStyleName"];
-            if (tableProps.ContainsKey("tableStyleId")) tableSpan.TableStyleId = tableProps["tableStyleId"];
-            if (tableProps.ContainsKey("alignment")) tableSpan.TableAlignment = tableProps["alignment"];
-            if (tableProps.ContainsKey("hasBorders")) tableSpan.HasBorders = tableProps["hasBorders"];
-            if (tableProps.ContainsKey("borderColor")) tableSpan.BorderColor = tableProps["borderColor"];
-
-            if (tableProps.ContainsKey("borderWidth") && double.TryParse(tableProps["borderWidth"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bw))
-                tableSpan.BorderWidth = bw;
-
-            if (tableProps.ContainsKey("tableWidthPercent") && double.TryParse(tableProps["tableWidthPercent"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double twp))
-                tableSpan.TableWidthPercent = twp;
-
-            var gridCols = table.Elements<TableGrid>().FirstOrDefault()?.Elements<GridColumn>().ToList();
-            List<double> columnWidths = new List<double>();
-            double totalTableWidth = 0;
-
-            if (gridCols != null)
-            {
-                foreach (var col in gridCols)
-                {
-                    double w = 0;
-                    if (col.Width != null && double.TryParse(col.Width.Value, out double parsedWidth)) w = parsedWidth;
-                    columnWidths.Add(w);
-                    totalTableWidth += w;
-                }
-            }
-
-            foreach (var row in table.Elements<TableRow>())
-            {
-                var rowData = new TableRowData();
-                var trPr = row.TableRowProperties;
-                if (trPr != null && trPr.Elements<TableHeader>().Any()) rowData.IsHeader = true;
-
-                var cells = row.Elements<TableCell>().ToList();
-                for (int i = 0; i < cells.Count; i++)
-                {
-                    var cell = cells[i];
-                    var cellData = new TableCellData();
-
-                    if (rowData.IsHeader) cellData.IsHeaderCell = true;
-
-                    if (totalTableWidth > 0 && i < columnWidths.Count)
-                        cellData.WidthPercent = Math.Round((columnWidths[i] / totalTableWidth) * 100, 2);
-
-                    var cellProps = ExtractCellProperties(cell);
-                    if (cellProps.ContainsKey("shading")) cellData.FillColor = cellProps["shading"];
-                    if (cellProps.ContainsKey("vAlign")) cellData.VAlign = cellProps["vAlign"];
-                    if (cellProps.ContainsKey("colSpan")) cellData.ColSpan = int.Parse(cellProps["colSpan"]);
-                    if (cellProps.ContainsKey("rowMerge")) cellData.RowMerge = cellProps["rowMerge"];
-
-                    foreach (var p in cell.Elements<Paragraph>())
-                    {
-                        bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
-
-                        var cellParaDataList = ParseParagraph(p, mainPart, resolver, outputDir, true);
-
-                        // فیلتر پاراگراف‌های نامرئی داخل جدول
-                        cellParaDataList.RemoveAll(pr =>
-                            pr.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
-                            pr.StartMs == null);
-
-                        if (cellParaDataList.Count > 0)
-                        {
-                            cellData.Paragraphs.AddRange(cellParaDataList);
-                            if (isBlankWord2)
-                            {
-                                foreach (var cp in cellParaDataList) _blankWord2Set.Add(cp);
-                            }
-                        }
-                    }
-
-                    cellData.Paragraphs = MergeBlankWord2Paragraphs(cellData.Paragraphs);
-
-                    rowData.Cells.Add(cellData);
-                }
-                tableSpan.TableRows.Add(rowData);
-            }
-
-            return tableSpan;
-        }
         public SpanData ParseTable(Table table, MainDocumentPart mainPart, FontResolver resolver, string outputDir)
         {
             var tableSpan = new SpanData { Type = "table" };
@@ -807,6 +734,7 @@ namespace WordToJsonParser
                 {
                     var cell = cells[i];
                     var cellData = new TableCellData();
+                    ExtractSmartCellPadding(cell, cellData); // 🌟 تزریق پدینگ‌های استخراج‌شده
 
                     if (rowData.IsHeader) cellData.IsHeaderCell = true;
 
@@ -818,6 +746,7 @@ namespace WordToJsonParser
                     if (cellProps.ContainsKey("vAlign")) cellData.VAlign = cellProps["vAlign"];
                     if (cellProps.ContainsKey("colSpan")) cellData.ColSpan = int.Parse(cellProps["colSpan"]);
                     if (cellProps.ContainsKey("rowMerge")) cellData.RowMerge = cellProps["rowMerge"];
+                    cellData.Borders = ExtractSmartCellBorders(cell);
 
                     // 🌟 بررسی تمام فرزندان سلول (پاراگراف و جدول‌های تودرتو)
                     foreach (var element in cell.Elements())
@@ -860,7 +789,59 @@ namespace WordToJsonParser
 
             return tableSpan;
         }
+        // 🌟 متد تبدیل مرز خام Word به مدل بهینه‌سازی شده
+        private BorderDetail ParseBorder(DocumentFormat.OpenXml.Wordprocessing.BorderType border)
+        {
+            if (border == null || border.Val == null || border.Val == DocumentFormat.OpenXml.Wordprocessing.BorderValues.None || border.Val == DocumentFormat.OpenXml.Wordprocessing.BorderValues.Nil)
+                return null;
 
+            return new BorderDetail
+            {
+                Val = border.Val.ToString(),
+                // در ورد، سایز خطوط بر اساس 1/8 Point ذخیره می‌شود. آن را استاندارد می‌کنیم
+                Width = border.Size != null && border.Size.HasValue ? Math.Round((double)border.Size.Value / 8.0, 1) : 1.0,
+                Color = border.Color != null && border.Color.Value != "auto" ? border.Color.Value : null
+            };
+        }
+
+        // 🌟 هسته اصلی استخراج مرزهای سلول با پشتیبانی کامل از ارث‌بری جدول
+        private CellBorders ExtractSmartCellBorders(DocumentFormat.OpenXml.Wordprocessing.TableCell cell)
+        {
+            var row = cell.Ancestors<DocumentFormat.OpenXml.Wordprocessing.TableRow>().FirstOrDefault();
+            var table = row?.Ancestors<DocumentFormat.OpenXml.Wordprocessing.Table>().FirstOrDefault();
+
+            // تشخیص موقعیت سلول برای استخراج مرزهای خارجی جدول
+            bool isFirstRow = table?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableRow>().FirstOrDefault() == row;
+            bool isLastRow = table?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableRow>().LastOrDefault() == row;
+            bool isFirstCol = row?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().FirstOrDefault() == cell;
+            bool isLastCol = row?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCell>().LastOrDefault() == cell;
+
+            var tcBorders = cell.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCellProperties>().FirstOrDefault()?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCellBorders>().FirstOrDefault();
+            var tblBorders = table?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableProperties>().FirstOrDefault()?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableBorders>().FirstOrDefault();
+
+            // قانون ارث‌بری: اول مرز خود سلول، دوم مرز خارجی/داخلی کل جدول
+            BorderDetail GetBorder(DocumentFormat.OpenXml.Wordprocessing.BorderType cellB, DocumentFormat.OpenXml.Wordprocessing.BorderType tblOuter, DocumentFormat.OpenXml.Wordprocessing.BorderType tblInner, bool isEdge)
+            {
+                if (cellB != null) return ParseBorder(cellB);
+                if (isEdge && tblOuter != null) return ParseBorder(tblOuter);
+                if (!isEdge && tblInner != null) return ParseBorder(tblInner);
+                return null;
+            }
+
+            var borders = new CellBorders
+            {
+                Top = GetBorder(tcBorders?.TopBorder, tblBorders?.TopBorder, tblBorders?.InsideHorizontalBorder, isFirstRow),
+                Bottom = GetBorder(tcBorders?.BottomBorder, tblBorders?.BottomBorder, tblBorders?.InsideHorizontalBorder, isLastRow),
+                Left = GetBorder(tcBorders?.LeftBorder, tblBorders?.LeftBorder, tblBorders?.InsideVerticalBorder, isFirstCol),
+                Right = GetBorder(tcBorders?.RightBorder, tblBorders?.RightBorder, tblBorders?.InsideVerticalBorder, isLastCol)
+            };
+
+            // اگر هیچ مرزی یافت نشد، کلاً null برمی‌گردانیم تا وارد فایل JSON نشود (کاهش حجم)
+            if (borders.Top == null && borders.Bottom == null && borders.Left == null && borders.Right == null)
+                return null;
+
+            return borders;
+        }
         // ==========================================
         // متدهای استخراج جزئیات، فونت و استایل‌ها
         // ==========================================
@@ -874,6 +855,9 @@ namespace WordToJsonParser
                 SpaceAfter = source.SpaceAfter,
                 SpaceBefore = source.SpaceBefore,
                 HasBorders = source.HasBorders,
+                IndentFirstLine = source.IndentFirstLine,
+                IndentLeft = source.IndentLeft,
+                IndentRight = source.IndentRight,
                 BorderColor = source.BorderColor,
                 BorderStyle = source.BorderStyle,
                 Spans = new List<SpanData>()
@@ -1412,6 +1396,91 @@ namespace WordToJsonParser
             if (!string.IsNullOrEmpty(width)) props.Add("widthDxa", width);
 
             return props;
+        }
+        private void ExtractSmartCellPadding(DocumentFormat.OpenXml.Wordprocessing.TableCell cell, TableCellData cellData)
+        {
+            var row = cell.Ancestors<DocumentFormat.OpenXml.Wordprocessing.TableRow>().FirstOrDefault();
+            var table = row?.Ancestors<DocumentFormat.OpenXml.Wordprocessing.Table>().FirstOrDefault();
+
+            var tcMargin = cell.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCellProperties>().FirstOrDefault()?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCellMargin>().FirstOrDefault();
+            var tblMargin = table?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableProperties>().FirstOrDefault()?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCellMarginDefault>().FirstOrDefault();
+
+            double? GetMargin<T>(T cellW, T tblW)
+                where T : DocumentFormat.OpenXml.Wordprocessing.TableWidthType
+            {
+                var target = cellW ?? tblW;
+
+                if (target?.Width != null &&
+                    double.TryParse(target.Width.Value, out double twips))
+                {
+                    return twips / 20.0;
+                }
+
+                return null;
+            }
+
+            cellData.PaddingTop = GetMargin(
+                tcMargin?.GetFirstChild<TopMargin>(),
+                tblMargin?.GetFirstChild<TopMargin>());
+
+            cellData.PaddingBottom = GetMargin(
+                tcMargin?.GetFirstChild<BottomMargin>(),
+                tblMargin?.GetFirstChild<BottomMargin>());
+
+            cellData.PaddingLeft = GetMargin(
+                tcMargin?.GetFirstChild<StartMargin>(),
+                tblMargin?.GetFirstChild<StartMargin>());
+
+            cellData.PaddingRight = GetMargin(
+                tcMargin?.GetFirstChild<EndMargin>(),
+                tblMargin?.GetFirstChild<EndMargin>());
+        }
+        private List<string> ExtractCellBorders(TableCell cell)
+        {
+            var borders = new List<string>();
+            var tcPr = cell.Elements<TableCellProperties>().FirstOrDefault();
+
+            if (tcPr != null)
+            {
+                var tcBorders = tcPr.Elements<TableCellBorders>().FirstOrDefault();
+                // ۱. بررسی مرزهای اختصاصی خود سلول
+                if (tcBorders != null)
+                {
+                    if (tcBorders.TopBorder != null && tcBorders.TopBorder.Val != BorderValues.None) borders.Add("top");
+                    if (tcBorders.BottomBorder != null && tcBorders.BottomBorder.Val != BorderValues.None) borders.Add("bottom");
+                    if (tcBorders.LeftBorder != null && tcBorders.LeftBorder.Val != BorderValues.None) borders.Add("left");
+                    if (tcBorders.RightBorder != null && tcBorders.RightBorder.Val != BorderValues.None) borders.Add("right");
+
+                    return borders; // اگر سلول مرز اختصاصی داشت، همین را برمی‌گردانیم
+                }
+            }
+
+            // ۲. فالبک (Fallback): اگر سلول مرز اختصاصی نداشت، بررسی مرزهای کل جدول
+            var table = cell.Ancestors<Table>().FirstOrDefault();
+            var tblPr = table?.Elements<TableProperties>().FirstOrDefault();
+            var tblBorders = tblPr?.Elements<TableBorders>().FirstOrDefault();
+
+            if (tblBorders != null)
+            {
+                if (tblBorders.TopBorder != null && tblBorders.TopBorder.Val != BorderValues.None) borders.Add("top");
+                if (tblBorders.BottomBorder != null && tblBorders.BottomBorder.Val != BorderValues.None) borders.Add("bottom");
+                if (tblBorders.LeftBorder != null && tblBorders.LeftBorder.Val != BorderValues.None) borders.Add("left");
+                if (tblBorders.RightBorder != null && tblBorders.RightBorder.Val != BorderValues.None) borders.Add("right");
+
+                // مرزهای داخلی جدول (اگر جدول خطوط شطرنجی داخلی داشته باشد)
+                if (tblBorders.InsideHorizontalBorder != null && tblBorders.InsideHorizontalBorder.Val != BorderValues.None)
+                {
+                    borders.Add("top");
+                    borders.Add("bottom");
+                }
+                if (tblBorders.InsideVerticalBorder != null && tblBorders.InsideVerticalBorder.Val != BorderValues.None)
+                {
+                    borders.Add("left");
+                    borders.Add("right");
+                }
+            }
+
+            return borders.Distinct().ToList(); // حذف جهت‌های تکراری احتمالی
         }
     }
 }
