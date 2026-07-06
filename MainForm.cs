@@ -283,6 +283,9 @@ namespace WordToJsonParser
                     // 🌟 هر دو مقدار رنگ متن و رنگ پس‌زمینه را از دکمه والد می‌گیریم
                     blankParentSpan.FillColor = null;
                     blankParentSpan.TextColor = null;
+                    // 🌟 مسدود کردن ارث‌بری بوردر برای دکمه اصلی
+                    blankParentSpan.HasBorders = null;
+                    blankParentSpan.BorderColor = null;
                 }
 
                 merged.Spans.Add(blankParentSpan);
@@ -658,9 +661,9 @@ namespace WordToJsonParser
             if (isBlankWord1 || isParentBlankWord2)
             {
                 // runShading = null; // 🌟 این خط حذف/کامنت شد تا FillColor از بین نرود
-                runHasBorders = null;
-                runBorderColor = null;
-                runBorderStyle = null;
+                //runHasBorders = null;
+                //runBorderColor = null;
+                //runBorderStyle = null;
                 //runTextColor = null; // برای خنثی کردن رنگ متن کاراکترها
             }
             if (lastTextSpan != null && lastTextSpan.Type == "text" &&
