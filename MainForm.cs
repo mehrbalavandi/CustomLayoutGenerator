@@ -644,27 +644,38 @@ namespace WordToJsonParser
                 if (string.IsNullOrEmpty(runTextColor) && pStyleId != null) runTextColor = GetColorFromStyleId(mainPart, pStyleId);
             }
 
+            // 🌟 اصلاح مهم: کادر متنی (Character Border) فقط باید از خود کلمه یا استایلِ مستقیمِ کلمه خوانده شود. 
+            // ارث‌بری از استایل پاراگراف (pStyleId) حذف شد تا کادر به تمام کلمات نشت نکند!
             Border rBorder = run.RunProperties?.Border;
             if (rBorder == null && !string.IsNullOrEmpty(runStyleId)) rBorder = GetRunBorderFromStyle(mainPart, runStyleId);
-            if (rBorder == null && pStyleId != null) rBorder = GetRunBorderFromStyle(mainPart, pStyleId);
 
             string runBorderColor = null, runHasBorders = null, runBorderStyle = null;
-            if (rBorder != null && rBorder.Val != null && rBorder.Val.Value != BorderValues.None)
+            if (rBorder != null && rBorder.Val != null && rBorder.Val.Value != BorderValues.None && rBorder.Val.Value != BorderValues.Nil)
             {
                 runHasBorders = "true";
                 runBorderColor = rBorder.Color?.Value;
-                if (runBorderColor == "auto" || string.IsNullOrEmpty(runBorderColor)) runBorderColor = "000000";
+                if (rBorder.Color != null && runBorderColor != "auto" && string.IsNullOrEmpty(runBorderColor))
+                {
+                    runBorderColor = rBorder.Color.Value;
+                }
                 runBorderStyle = rBorder.Val.Value.ToString();
             }
-            // 🌟 مسدود کردن نشت رنگ و حاشیه برای کلمات جای‌خالی (BlankWord1) و پاراگراف‌های والد (BlankWord2)
+            else
+            {
+                // 🌟 اصلاح شد: به جای "false"، کلاً تهی (null) می‌شود تا در JSON وارد نشده و باعث خطای پیش‌فرض فلاتر نگردد
+                runHasBorders = null;
+                runBorderColor = null;
+                runBorderStyle = null;
+            }
+
+            // 🌟 مسدود کردن نشت رنگ و حاشیه برای کلمات جای‌خالی (BlankWord1)
             bool isParentBlankWord2 = IsTargetStyle(pStyleId, mainPart, "BlankWord2");
-            if (isBlankWord1 || isParentBlankWord2)
+            if (isBlankWord1)
             {
                 // runShading = null; // 🌟 این خط حذف/کامنت شد تا FillColor از بین نرود
-                //runHasBorders = null;
-                //runBorderColor = null;
-                //runBorderStyle = null;
-                //runTextColor = null; // برای خنثی کردن رنگ متن کاراکترها
+                runHasBorders = null;
+                runBorderColor = null;
+                runBorderStyle = null;
             }
             if (lastTextSpan != null && lastTextSpan.Type == "text" &&
                 lastTextSpan.Url == hyperlinkUrl &&
