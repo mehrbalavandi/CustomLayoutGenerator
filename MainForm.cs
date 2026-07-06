@@ -709,9 +709,9 @@ namespace WordToJsonParser
             if (tableProps.ContainsKey("tableWidthPercent") && double.TryParse(tableProps["tableWidthPercent"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double twp))
                 tableSpan.TableWidthPercent = twp;
 
+            // 🌟 شبکه اصلی جدول فقط به عنوان پشتیبان (فال‌بک) استخراج می‌شود
             var gridCols = table.Elements<TableGrid>().FirstOrDefault()?.Elements<GridColumn>().ToList();
-            List<double> columnWidths = new List<double>();
-            double totalTableWidth = 0;
+            List<double> baseGridWidths = new List<double>();
 
             if (gridCols != null)
             {
@@ -719,8 +719,7 @@ namespace WordToJsonParser
                 {
                     double w = 0;
                     if (col.Width != null && double.TryParse(col.Width.Value, out double parsedWidth)) w = parsedWidth;
-                    columnWidths.Add(w);
-                    totalTableWidth += w;
+                    baseGridWidths.Add(w);
                 }
             }
 
@@ -731,6 +730,43 @@ namespace WordToJsonParser
                 if (trPr != null && trPr.Elements<TableHeader>().Any()) rowData.IsHeader = true;
 
                 var cells = row.Elements<TableCell>().ToList();
+
+                // 🌟 جادوی جدید: محاسبه مستقل پهنای سلول‌ها برای همین ردیف (پشتیبانی از ColSpan و عرض متفاوت ردیف‌ها)
+                List<double> rowCellWidths = new List<double>();
+                double rowTotalWidth = 0;
+                int currentGridIndex = 0;
+
+                foreach (var cell in cells)
+                {
+                    var tcPr = cell.Elements<TableCellProperties>().FirstOrDefault();
+                    double cellWidth = 0;
+
+                    int colSpan = 1;
+                    if (tcPr?.GridSpan != null && tcPr.GridSpan.Val != null)
+                        colSpan = tcPr.GridSpan.Val.Value;
+
+                    // اولویت اول: عرض صریح خود سلول در این ردیف
+                    var tcw = tcPr?.TableCellWidth;
+                    if (tcw != null && tcw.Width != null && double.TryParse(tcw.Width.Value, out double wVal))
+                    {
+                        cellWidth = wVal;
+                    }
+
+                    // اولویت دوم (فال‌بک): استفاده از شبکه اصلی جدول با احتساب ادغام سلول‌ها
+                    if (cellWidth <= 0 && baseGridWidths.Count > 0)
+                    {
+                        for (int c = 0; c < colSpan; c++)
+                        {
+                            if (currentGridIndex + c < baseGridWidths.Count)
+                                cellWidth += baseGridWidths[currentGridIndex + c];
+                        }
+                    }
+
+                    rowCellWidths.Add(cellWidth);
+                    rowTotalWidth += cellWidth;
+                    currentGridIndex += colSpan;
+                }
+
                 for (int i = 0; i < cells.Count; i++)
                 {
                     var cell = cells[i];
@@ -739,15 +775,16 @@ namespace WordToJsonParser
 
                     if (rowData.IsHeader) cellData.IsHeaderCell = true;
 
-                    if (totalTableWidth > 0 && i < columnWidths.Count)
-                        cellData.WidthPercent = Math.Round((columnWidths[i] / totalTableWidth) * 100, 2);
+                    // 🌟 اعمال پهنای اختصاصی محاسبه شده برای همین ردیف
+                    if (rowTotalWidth > 0 && i < rowCellWidths.Count)
+                        cellData.WidthPercent = Math.Round((rowCellWidths[i] / rowTotalWidth) * 100, 2);
 
                     var cellProps = ExtractCellProperties(cell);
                     if (cellProps.ContainsKey("shading")) cellData.FillColor = cellProps["shading"];
                     if (cellProps.ContainsKey("vAlign")) cellData.VAlign = cellProps["vAlign"];
                     if (cellProps.ContainsKey("colSpan")) cellData.ColSpan = int.Parse(cellProps["colSpan"]);
                     if (cellProps.ContainsKey("rowMerge")) cellData.RowMerge = cellProps["rowMerge"];
-                    cellData.Borders = ExtractSmartCellBorders(cell);
+                    cellData.Borders = ExtractSmartCellBorders(cell); // 🌟 تزریق مرزهای استخراج‌شده
 
                     // 🌟 بررسی تمام فرزندان سلول (پاراگراف و جدول‌های تودرتو)
                     foreach (var element in cell.Elements())
@@ -790,6 +827,7 @@ namespace WordToJsonParser
 
             return tableSpan;
         }
+
         // 🌟 متد تبدیل مرز خام Word به مدل بهینه‌سازی شده
         private BorderDetail ParseBorder(DocumentFormat.OpenXml.Wordprocessing.BorderType border)
         {
