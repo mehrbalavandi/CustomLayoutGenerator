@@ -14,9 +14,8 @@ namespace WordToJsonParser
         public string Direction { get; set; }
         public string FillColor { get; set; }
 
-        public string HasBorders { get; set; }
-        public string BorderColor { get; set; }
-        public string BorderStyle { get; set; }
+        // 🌟 ارتقاء: تجمیع ویژگی‌های بوردر در کلاس مشترک
+        public BorderDetail Borders { get; set; }
 
         public double SpaceAfter { get; set; }
         public double SpaceBefore { get; set; }
@@ -24,7 +23,6 @@ namespace WordToJsonParser
         public double? IndentRight { get; set; }
         public double? IndentFirstLine { get; set; }
 
-        // 🌟 فیلدهای اضافه‌شده برای پشتیبانی از سیستم همگام‌سازی فایل صوتی (Karaoke)
         public int? StartMs { get; set; }
         public int? EndMs { get; set; }
         public string AudioTrackName { get; set; }
@@ -42,9 +40,9 @@ namespace WordToJsonParser
         public string FloatPosition { get; set; }
         public string FillColor { get; set; }
         public string TextColor { get; set; }
-        public string BorderColor { get; set; }
-        public string BorderStyle { get; set; }
-        public double? BorderWidth { get; set; }
+
+        // 🌟 ارتقاء: اضافه شدن کلاس مشترک بوردر در سطح متن (Span)
+        public BorderDetail Borders { get; set; }
 
         public string TableStyleId { get; set; }
         public string TableStyleName { get; set; }
@@ -61,12 +59,12 @@ namespace WordToJsonParser
         public bool IsHeader { get; set; }
         public List<TableCellData> Cells { get; set; } = new List<TableCellData>();
     }
-    // 🌟 کلاس‌های جدید برای نگهداری جزئیات هر خط مرزی
+
     public class BorderDetail
     {
-        public double? Width { get; set; } // ضخامت بر اساس Point
-        public string Color { get; set; }  // کد رنگ Hex
-        public string Val { get; set; }    // نوع خط (single, dashed و ...)
+        public double? Width { get; set; }
+        public string Color { get; set; }
+        public string Val { get; set; }
     }
 
     public class CellBorders
@@ -76,6 +74,7 @@ namespace WordToJsonParser
         public BorderDetail Left { get; set; }
         public BorderDetail Right { get; set; }
     }
+
     public class TableCellData
     {
         public List<ParagraphData> Paragraphs { get; set; } = new List<ParagraphData>();

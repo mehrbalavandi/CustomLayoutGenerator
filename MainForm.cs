@@ -284,8 +284,8 @@ namespace WordToJsonParser
                     blankParentSpan.FillColor = null;
                     blankParentSpan.TextColor = null;
                     // 🌟 مسدود کردن ارث‌بری بوردر برای دکمه اصلی
-                    blankParentSpan.HasBorders = null;
-                    blankParentSpan.BorderColor = null;
+                    //blankParentSpan.HasBorders = null;
+                    blankParentSpan.Borders = null;
                 }
 
                 merged.Spans.Add(blankParentSpan);
@@ -389,10 +389,7 @@ namespace WordToJsonParser
 
                 if (pBorder != null && pBorder.Val != null && pBorder.Val.Value != BorderValues.None)
                 {
-                    basePara.HasBorders = "true";
-                    basePara.BorderColor = pBorder.Color?.Value;
-                    if (basePara.BorderColor == "auto" || string.IsNullOrEmpty(basePara.BorderColor)) basePara.BorderColor = "000000";
-                    basePara.BorderStyle = pBorder.Val.Value.ToString();
+                    basePara.Borders = ParseBorder(pBorder);
                 }
 
                 if (p.ParagraphProperties.SectionProperties != null)
@@ -403,9 +400,7 @@ namespace WordToJsonParser
                 if (isBlankWord2)
                 {
                     basePara.FillColor = null;
-                    basePara.HasBorders = null;
-                    basePara.BorderColor = null;
-                    basePara.BorderStyle = null;
+                    basePara.Borders = null;
                 }
             }
 
@@ -649,6 +644,12 @@ namespace WordToJsonParser
             Border rBorder = run.RunProperties?.Border;
             if (rBorder == null && !string.IsNullOrEmpty(runStyleId)) rBorder = GetRunBorderFromStyle(mainPart, runStyleId);
 
+            BorderDetail runBorder = null;
+            if (rBorder != null && rBorder.Val != null && rBorder.Val.Value != BorderValues.None && rBorder.Val.Value != BorderValues.Nil)
+            {
+                runBorder = ParseBorder(rBorder);
+            }
+
             string runBorderColor = null, runHasBorders = null, runBorderStyle = null;
             if (rBorder != null && rBorder.Val != null && rBorder.Val.Value != BorderValues.None && rBorder.Val.Value != BorderValues.Nil)
             {
@@ -672,18 +673,20 @@ namespace WordToJsonParser
             bool isParentBlankWord2 = IsTargetStyle(pStyleId, mainPart, "BlankWord2");
             if (isBlankWord1)
             {
-                // runShading = null; // 🌟 این خط حذف/کامنت شد تا FillColor از بین نرود
-                runHasBorders = null;
-                runBorderColor = null;
-                runBorderStyle = null;
+                runBorder = null;
             }
+            bool bordersAreEqual = (lastTextSpan?.Borders == null && runBorder == null) ||
+                                          (lastTextSpan?.Borders != null && runBorder != null &&
+                                           lastTextSpan.Borders.Val == runBorder.Val &&
+                                           lastTextSpan.Borders.Width == runBorder.Width &&
+                                           lastTextSpan.Borders.Color == runBorder.Color);
+
             if (lastTextSpan != null && lastTextSpan.Type == "text" &&
                 lastTextSpan.Url == hyperlinkUrl &&
                 lastTextSpan.Markers.SequenceEqual(currentMarkers) &&
                 lastTextSpan.FillColor == runShading &&
                 lastTextSpan.TextColor == runTextColor &&
-                lastTextSpan.HasBorders == runHasBorders &&
-                lastTextSpan.BorderColor == runBorderColor)
+                bordersAreEqual)
             {
                 lastTextSpan.Content += runText;
             }
@@ -693,12 +696,7 @@ namespace WordToJsonParser
 
                 if (!string.IsNullOrEmpty(runShading)) newTextSpan.FillColor = runShading;
                 if (!string.IsNullOrEmpty(runTextColor)) newTextSpan.TextColor = runTextColor;
-                if (!string.IsNullOrEmpty(runHasBorders))
-                {
-                    newTextSpan.HasBorders = runHasBorders;
-                    newTextSpan.BorderColor = runBorderColor;
-                    newTextSpan.BorderStyle = runBorderStyle;
-                }
+                if (runBorder != null) newTextSpan.Borders = runBorder; // تزریق مستقیم شیء مشترک بوردر
 
                 paraData.Spans.Add(newTextSpan);
                 lastTextSpan = newTextSpan;
@@ -714,11 +712,28 @@ namespace WordToJsonParser
             if (tableProps.ContainsKey("tableStyleName")) tableSpan.TableStyleName = tableProps["tableStyleName"];
             if (tableProps.ContainsKey("tableStyleId")) tableSpan.TableStyleId = tableProps["tableStyleId"];
             if (tableProps.ContainsKey("alignment")) tableSpan.TableAlignment = tableProps["alignment"];
-            if (tableProps.ContainsKey("hasBorders")) tableSpan.HasBorders = tableProps["hasBorders"];
-            if (tableProps.ContainsKey("borderColor")) tableSpan.BorderColor = tableProps["borderColor"];
+            bool hasBorderInfo = tableProps.ContainsKey("borderColor") || tableProps.ContainsKey("borderWidth");
 
-            if (tableProps.ContainsKey("borderWidth") && double.TryParse(tableProps["borderWidth"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bw))
-                tableSpan.BorderWidth = bw;
+            if (hasBorderInfo)
+            {
+                // اگر شیء Borders هنوز ساخته نشده، آن را ایجاد می‌کنیم
+                if (tableSpan.Borders == null)
+                    tableSpan.Borders = new BorderDetail();
+
+                // تنظیم رنگ
+                if (tableProps.ContainsKey("borderColor"))
+                    tableSpan.Borders.Color = tableProps["borderColor"];
+
+                // تنظیم ضخامت
+                if (tableProps.ContainsKey("borderWidth") && double.TryParse(tableProps["borderWidth"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bw))
+                    tableSpan.Borders.Width = bw;
+
+                // تنظیم یک استایل پیش‌فرض برای کادر تا در فلاتر قابل شناسایی باشد
+                if (string.IsNullOrEmpty(tableSpan.Borders.Val))
+                    tableSpan.Borders.Val = "single";
+            }
+
+
 
             if (tableProps.ContainsKey("tableWidthPercent") && double.TryParse(tableProps["tableWidthPercent"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double twp))
                 tableSpan.TableWidthPercent = twp;
@@ -856,7 +871,18 @@ namespace WordToJsonParser
                 Color = border.Color != null && border.Color.Value != "auto" ? border.Color.Value : null
             };
         }
+        private BorderDetail ParseBorder(DocumentFormat.OpenXml.Wordprocessing.Border border)
+        {
+            if (border == null || border.Val == null || border.Val == DocumentFormat.OpenXml.Wordprocessing.BorderValues.None || border.Val == DocumentFormat.OpenXml.Wordprocessing.BorderValues.Nil)
+                return null;
 
+            return new BorderDetail
+            {
+                Val = border.Val.ToString(),
+                Width = border.Size != null && border.Size.HasValue ? Math.Round((double)border.Size.Value / 8.0, 1) : 1.0,
+                Color = border.Color != null && border.Color.Value != "auto" ? border.Color.Value : null
+            };
+        }
         // 🌟 هسته اصلی استخراج مرزهای سلول با پشتیبانی کامل از ارث‌بری جدول
         private CellBorders ExtractSmartCellBorders(DocumentFormat.OpenXml.Wordprocessing.TableCell cell)
         {
@@ -881,6 +907,7 @@ namespace WordToJsonParser
                 return null;
             }
 
+            // ادامه قطعه کد آخر سی‌شارپ شما جهت تکمیل متد:
             var borders = new CellBorders
             {
                 Top = GetBorder(tcBorders?.TopBorder, tblBorders?.TopBorder, tblBorders?.InsideHorizontalBorder, isFirstRow),
@@ -888,10 +915,6 @@ namespace WordToJsonParser
                 Left = GetBorder(tcBorders?.LeftBorder, tblBorders?.LeftBorder, tblBorders?.InsideVerticalBorder, isFirstCol),
                 Right = GetBorder(tcBorders?.RightBorder, tblBorders?.RightBorder, tblBorders?.InsideVerticalBorder, isLastCol)
             };
-
-            // اگر هیچ مرزی یافت نشد، کلاً null برمی‌گردانیم تا وارد فایل JSON نشود (کاهش حجم)
-            if (borders.Top == null && borders.Bottom == null && borders.Left == null && borders.Right == null)
-                return null;
 
             return borders;
         }
@@ -907,12 +930,10 @@ namespace WordToJsonParser
                 FillColor = source.FillColor,
                 SpaceAfter = source.SpaceAfter,
                 SpaceBefore = source.SpaceBefore,
-                HasBorders = source.HasBorders,
                 IndentFirstLine = source.IndentFirstLine,
                 IndentLeft = source.IndentLeft,
                 IndentRight = source.IndentRight,
-                BorderColor = source.BorderColor,
-                BorderStyle = source.BorderStyle,
+                Borders = source.Borders != null ? new BorderDetail { Val = source.Borders.Val, Width = source.Borders.Width, Color = source.Borders.Color } : null,
                 Spans = new List<SpanData>()
             };
         }
@@ -927,15 +948,12 @@ namespace WordToJsonParser
                 Url = source.Url,
                 FillColor = source.FillColor,
                 TextColor = source.TextColor,
-                HasBorders = source.HasBorders,
-                BorderColor = source.BorderColor,
-                BorderStyle = source.BorderStyle,
+                Borders = source.Borders != null ? new BorderDetail { Val = source.Borders.Val, Width = source.Borders.Width, Color = source.Borders.Color } : null,
                 FloatPosition = source.FloatPosition,
                 TableStyleName = source.TableStyleName,
                 TableStyleId = source.TableStyleId,
                 TableAlignment = source.TableAlignment,
                 TableWidthPercent = source.TableWidthPercent,
-                BorderWidth = source.BorderWidth,
                 TableRows = source.TableRows
             };
         }
