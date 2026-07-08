@@ -11,12 +11,6 @@ using System.Windows.Forms;
 
 namespace WordToJsonParser
 {
-    // 🌟 ساختار یکپارچه خروجی JSON (نرمال‌سازی داده‌ها)
-    public class BookExportData
-    {
-        public List<PageData> Pages { get; set; } = new List<PageData>();
-        public List<ParagraphData> AudioScripts { get; set; } = new List<ParagraphData>();
-    }
 
     public partial class MainForm : Form
     {
@@ -1553,5 +1547,13 @@ namespace WordToJsonParser
 
             return borders.Distinct().ToList(); // حذف جهت‌های تکراری احتمالی
         }
+    }
+
+
+    // 🌟 ساختار یکپارچه خروجی JSON (نرمال‌سازی داده‌ها)
+    public class BookExportData
+    {
+        public List<PageData> Pages { get; set; } = new List<PageData>();
+        public List<ParagraphData> AudioScripts { get; set; } = new List<ParagraphData>();
     }
 }
