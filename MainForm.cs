@@ -573,8 +573,10 @@ namespace WordToJsonParser
             var drawing = run.Descendants<DocumentFormat.OpenXml.Wordprocessing.Drawing>().FirstOrDefault();
             if (drawing != null)
             {
-                var imgUrl = ExtractAndSaveImage(drawing, mainPart, outputDir);
-                if (imgUrl != null)
+                // 🌟 دریافت همزمان نام فایل و ابعاد
+                var imgResult = ExtractAndSaveImage(drawing, mainPart, outputDir);
+
+                if (imgResult != null)
                 {
                     string floatPos = "none";
                     var anchor = drawing.Descendants<DocumentFormat.OpenXml.Drawing.Wordprocessing.Anchor>().FirstOrDefault();
@@ -584,7 +586,15 @@ namespace WordToJsonParser
                         var align = hPos?.Elements<DocumentFormat.OpenXml.Drawing.Wordprocessing.HorizontalAlignment>().FirstOrDefault();
                         if (align != null) floatPos = align.Text.ToLower();
                     }
-                    paraData.Spans.Add(new SpanData { Type = "image", Url = imgUrl, FloatPosition = floatPos });
+
+                    paraData.Spans.Add(new SpanData
+                    {
+                        Type = "image",
+                        Url = imgResult.Value.FileName,
+                        FloatPosition = floatPos,
+                        ImageWidth = imgResult.Value.Width,   // 🌟 ذخیره عرض در مدل
+                        ImageHeight = imgResult.Value.Height  // 🌟 ذخیره ارتفاع در مدل
+                    });
                 }
                 lastTextSpan = null;
                 return;
@@ -940,6 +950,10 @@ namespace WordToJsonParser
                 Content = source.Content,
                 Markers = source.Markers != null ? new List<string>(source.Markers) : new List<string>(),
                 Url = source.Url,
+
+                ImageWidth = source.ImageWidth,   // 🌟 کپی کردن عرض
+                ImageHeight = source.ImageHeight, // 🌟 کپی کردن ارتفاع
+
                 FillColor = source.FillColor,
                 TextColor = source.TextColor,
                 Borders = source.Borders != null ? new BorderDetail { Val = source.Borders.Val, Width = source.Borders.Width, Color = source.Borders.Color } : null,
@@ -1230,7 +1244,7 @@ namespace WordToJsonParser
             return markers;
         }
 
-        private string ExtractAndSaveImage(DocumentFormat.OpenXml.Wordprocessing.Drawing drawing, MainDocumentPart mainPart, string outputDir)
+        private (string FileName, int Width, int Height)? ExtractAndSaveImage(DocumentFormat.OpenXml.Wordprocessing.Drawing drawing, MainDocumentPart mainPart, string outputDir)
         {
             var blip = drawing.Descendants<DocumentFormat.OpenXml.Drawing.Blip>().FirstOrDefault();
             if (blip == null || string.IsNullOrEmpty(blip.Embed?.Value)) return null;
@@ -1275,12 +1289,14 @@ namespace WordToJsonParser
                                 croppedBitmap.Save(filePath);
                             }
                         }
-                        return $"{fileName}";
+                        // 🌟 بازگرداندن ابعاد تصویر کراپ شده
+                        return (fileName, width, height);
                     }
                 }
                 originalImage.Save(filePath);
+                // 🌟 بازگرداندن ابعاد تصویر اصلی
+                return (fileName, originalImage.Width, originalImage.Height);
             }
-            return $"{fileName}";
         }
 
         private string GetHyperlinkUrl(MainDocumentPart mainPart, string id)

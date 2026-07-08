@@ -37,6 +37,9 @@ namespace WordToJsonParser
         public List<string> Markers { get; set; } = new List<string>();
         public string Url { get; set; }
 
+        public int? ImageWidth { get; set; }
+        public int? ImageHeight { get; set; }
+
         public string FloatPosition { get; set; }
         public string FillColor { get; set; }
         public string TextColor { get; set; }
