@@ -47,56 +47,76 @@ namespace WordToJsonParser
 
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
                 {
+                    string originalFile = openFileDialog.FileName;
+
+                    // ساخت فایل موقت
+                    string tempFile = Path.Combine(
+                        Path.GetTempPath(),
+                        Guid.NewGuid().ToString() + Path.GetExtension(originalFile));
+
+                    File.Copy(originalFile, tempFile, true);
+
                     string filePath = openFileDialog.FileName;
-                    string outputDir = Path.GetDirectoryName(filePath);
-
-                    ResetCounters();
-
-                    // ۱. پردازش کتاب اصلی
-                    List<PageData> pages = ProcessWordDocument(filePath, outputDir);
-
-                    // ادغام پاراگراف‌های BlankWord2 برای کتاب اصلی
-                    foreach (var page in pages)
+                    try
                     {
-                        page.Paragraphs = MergeBlankWord2Paragraphs(page.Paragraphs);
-                    }
+                        string outputDir = Path.GetDirectoryName(filePath);
 
-                    List<ParagraphData> audioScripts = new List<ParagraphData>();
+                        ResetCounters();
 
-                    // ۲. دریافت فایل صوتی در صورت نیاز
-                    DialogResult hasAudio = MessageBox.Show(
-                        "آیا فایل اسکریپت صوتی (Audio Script) هم برای این کتاب دارید؟",
-                        "اسکریپت صوتی",
-                        MessageBoxButtons.YesNo,
-                        MessageBoxIcon.Question);
+                        // ۱. پردازش کتاب اصلی
+                        List<PageData> pages = ProcessWordDocument(tempFile, outputDir);
 
-                    if (hasAudio == DialogResult.Yes)
-                    {
-                        using (OpenFileDialog audioDialog = new OpenFileDialog())
+                        // ادغام پاراگراف‌های BlankWord2 برای کتاب اصلی
+                        foreach (var page in pages)
                         {
-                            audioDialog.Title = "انتخاب فایل اسکریپت صوتی (Word)";
-                            audioDialog.Filter = "Word Documents (*.docx)|*.docx";
-                            if (audioDialog.ShowDialog() == DialogResult.OK)
+                            page.Paragraphs = MergeBlankWord2Paragraphs(page.Paragraphs);
+                        }
+
+                        List<ParagraphData> audioScripts = new List<ParagraphData>();
+
+                        // ۲. دریافت فایل صوتی در صورت نیاز
+                        DialogResult hasAudio = MessageBox.Show(
+                            "آیا فایل اسکریپت صوتی (Audio Script) هم برای این کتاب دارید؟",
+                            "اسکریپت صوتی",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Question);
+
+                        if (hasAudio == DialogResult.Yes)
+                        {
+                            using (OpenFileDialog audioDialog = new OpenFileDialog())
                             {
-                                audioScripts = ProcessAudioScriptWordFile(audioDialog.FileName, outputDir);
-                                // ادغام پاراگراف‌های BlankWord2 برای اسکریپت‌های صوتی
-                                audioScripts = MergeBlankWord2Paragraphs(audioScripts);
+                                audioDialog.Title = "انتخاب فایل اسکریپت صوتی (Word)";
+                                audioDialog.Filter = "Word Documents (*.docx)|*.docx";
+                                if (audioDialog.ShowDialog() == DialogResult.OK)
+                                {
+                                    audioScripts = ProcessAudioScriptWordFile(audioDialog.FileName, outputDir);
+                                    // ادغام پاراگراف‌های BlankWord2 برای اسکریپت‌های صوتی
+                                    audioScripts = MergeBlankWord2Paragraphs(audioScripts);
+                                }
                             }
                         }
+
+                        // ۳. تولید خروجی JSON یکپارچه
+                        var exportData = new BookExportData
+                        {
+                            Pages = pages,
+                            AudioScripts = audioScripts
+                        };
+
+                        string jsonOutput = JsonConvert.SerializeObject(exportData, Formatting.Indented,
+                            new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+
+                        File.WriteAllText(Path.Combine(outputDir, "output.json"), jsonOutput);
+                        MessageBox.Show("فایل با موفقیت پردازش و ذخیره شد!", "عملیات موفق", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
-
-                    // ۳. تولید خروجی JSON یکپارچه
-                    var exportData = new BookExportData
+                    finally
                     {
-                        Pages = pages,
-                        AudioScripts = audioScripts
-                    };
-
-                    string jsonOutput = JsonConvert.SerializeObject(exportData, Formatting.Indented,
-                        new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
-
-                    File.WriteAllText(Path.Combine(outputDir, "output.json"), jsonOutput);
-                    MessageBox.Show("فایل با موفقیت پردازش و ذخیره شد!", "عملیات موفق", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        // حذف فایل موقت
+                        if (File.Exists(tempFile))
+                        {
+                            File.Delete(tempFile);
+                        }
+                    }
                 }
             }
         }
