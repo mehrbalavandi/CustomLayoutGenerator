@@ -55,6 +55,10 @@ namespace WordToJsonParser
 
         public List<SpanData> InnerSpans { get; set; } = new List<SpanData>();
         public List<TableRowData> TableRows { get; set; } = new List<TableRowData>();
+        // 🌟 ریسپانسیو (نتیجهٔ lowering از روی نام استایلِ Word)
+        public string ResponsiveStrategy { get; set; }  // "horizontalScroll" | "collapseToCards"
+        public string LayoutDirection { get; set; }      // برای Type=="layout": "row" | "column"
+        public string LayoutReflow { get; set; }         // "stack" | "wrap" | "none"
     }
 
     public class TableRowData

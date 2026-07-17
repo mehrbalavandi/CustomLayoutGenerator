@@ -96,18 +96,15 @@ namespace WordToJsonParser
                             }
                         }
 
-                        // ۳. تولید خروجی JSON یکپارچه
-                        var exportData = new BookExportData
-                        {
-                            Pages = pages,
-                            AudioScripts = audioScripts
-                        };
+                        // 🌟 ۱. ریسپانسیو: نام استایل‌های جدول → primitiveهای declarative
+                        ResponsiveLowering.Apply(pages);
 
-                        string jsonOutput = JsonConvert.SerializeObject(exportData, Formatting.Indented,
-                            new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore });
+                        // 🌟 ۲. خروجی per-page + index.json (نسخهٔ هر صفحه = هَشِ محتوا)
+                        BookOutputWriter.Write(outputDir, pages, audioScripts);
 
-                        File.WriteAllText(Path.Combine(outputDir, "output.json"), jsonOutput);
-                        MessageBox.Show("فایل با موفقیت پردازش و ذخیره شد!", "عملیات موفق", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        MessageBox.Show(
+                            $"کتاب با موفقیت به {pages.Count} فایلِ صفحه + index.json تبدیل شد!",
+                            "عملیات موفق", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     finally
                     {
