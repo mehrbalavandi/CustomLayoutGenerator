@@ -331,6 +331,19 @@ namespace WordToJsonParser
         {
             var basePara = new ParagraphData();
 
+            // 🌟 لیست‌ها: numId/level را بخوان و مارکرِ آماده را از روی شمارنده‌ها بساز
+            var _np = NumberingResolver.ReadNumPr(p, mainPart);
+            if (_np != null)
+            {
+                var _li = Numbering(mainPart).Next(_np.Value.NumId, _np.Value.Level);
+                if (_li != null)
+                {
+                    basePara.ListMarker = _li.Value.Marker;
+                    basePara.ListType = _li.Value.Kind;
+                    basePara.ListLevel = _np.Value.Level;
+                }
+            }
+
             // استخراج استایل و خواص پایه پاراگراف
             if (p.ParagraphProperties != null)
             {
@@ -338,8 +351,8 @@ namespace WordToJsonParser
                 basePara.Direction = (bidi != null) ? "RTL" : "LTR";
 
                 var justification = p.ParagraphProperties.Justification;
-                if (justification != null)
-                    basePara.Alignment = justification.Val.Value.ToString().Substring(0, 1).ToUpper();
+                if (justification?.Val != null)
+                    basePara.Alignment = MapAlignment(justification.Val.Value);
 
                 // 🌟 استخراج دقیق تورفتگی‌های پاراگراف (Indentation)
                 if (p.ParagraphProperties.Indentation != null)
@@ -371,6 +384,16 @@ namespace WordToJsonParser
 
                     if (spacing.Before != null && double.TryParse(spacing.Before.Value, out double beforeTwips))
                         spaceBefore = beforeTwips / 20.0;
+
+                    // 🌟 فاصله‌ی بین خطوطِ یک پاراگراف (line spacing)
+                    if (spacing.Line != null && double.TryParse(spacing.Line.Value, out double lineVal))
+                    {
+                        var rule = spacing.LineRule?.Value;
+                        // حالت auto/multiple: مقدار در 240امِ خط است (240=تک، 360=۱٫۵، 480=دوبل)
+                        if (rule == null || rule == LineSpacingRuleValues.Auto)
+                            basePara.LineSpacing = lineVal / 240.0;
+                        // حالت exact/atLeast مقدارِ مطلق (twip) است؛ فعلاً رد می‌کنیم تا مقیاسِ اشتباه اعمال نشود
+                    }
                 }
 
                 if (p.ParagraphProperties.ParagraphStyleId != null)
@@ -942,6 +965,30 @@ namespace WordToJsonParser
         // ==========================================
         // متدهای استخراج جزئیات، فونت و استایل‌ها
         // ==========================================
+        // 🌟 نگاشتِ درستِ Justification به کدِ تک‌حرفیِ فلاتر (به‌جای Substring که "Both" را "B" می‌کرد)
+        private static string MapAlignment(JustificationValues v)
+        {
+            if (v == JustificationValues.Center) return "C";
+            if (v == JustificationValues.Right) return "R";
+            if (v == JustificationValues.End) return "R";          // انتهای خط (RTL-relative)
+            if (v == JustificationValues.Both) return "J";         // justify
+            if (v == JustificationValues.Distribute) return "J";
+            return "L";                                            // Left / Start / پیش‌فرض
+        }
+
+        // 🌟 کشِ NumberingResolver که با تغییرِ سند (mainPart) خودکار ری‌ست می‌شود
+        private NumberingResolver _numbering;
+        private MainDocumentPart _numberingPart;
+        private NumberingResolver Numbering(MainDocumentPart mainPart)
+        {
+            if (!ReferenceEquals(_numberingPart, mainPart))
+            {
+                _numbering = new NumberingResolver(mainPart);
+                _numberingPart = mainPart;
+            }
+            return _numbering;
+        }
+
         private ParagraphData CloneParagraphProperties(ParagraphData source)
         {
             return new ParagraphData
@@ -951,6 +998,7 @@ namespace WordToJsonParser
                 FillColor = source.FillColor,
                 SpaceAfter = source.SpaceAfter,
                 SpaceBefore = source.SpaceBefore,
+                LineSpacing = source.LineSpacing,
                 IndentFirstLine = source.IndentFirstLine,
                 IndentLeft = source.IndentLeft,
                 IndentRight = source.IndentRight,

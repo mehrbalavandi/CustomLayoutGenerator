@@ -19,9 +19,15 @@ namespace WordToJsonParser
 
         public double SpaceAfter { get; set; }
         public double SpaceBefore { get; set; }
+        public double? LineSpacing { get; set; }       // ضریبِ فاصله‌ی خطوط (240=تک → 1.0)
         public double? IndentLeft { get; set; }
         public double? IndentRight { get; set; }
         public double? IndentFirstLine { get; set; }
+
+        // 🌟 لیست‌های شماره‌دار/بولت (numbering که در C# به مارکرِ آماده تبدیل شده)
+        public string ListType { get; set; }           // "ordered" | "bullet"
+        public int? ListLevel { get; set; }            // 0 = سطح اول
+        public string ListMarker { get; set; }         // "1." , "a)" , "•"
 
         public int? StartMs { get; set; }
         public int? EndMs { get; set; }
