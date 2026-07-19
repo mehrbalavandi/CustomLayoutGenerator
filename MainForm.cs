@@ -1003,6 +1003,11 @@ namespace WordToJsonParser
                 IndentLeft = source.IndentLeft,
                 IndentRight = source.IndentRight,
                 Borders = source.Borders != null ? new BorderDetail { Val = source.Borders.Val, Width = source.Borders.Width, Color = source.Borders.Color } : null,
+                // 🌟 لیست‌ها: بدون این‌ها، مارکرِ ست‌شده روی basePara هنگام clone گم می‌شد
+                // و اصلاً در JSON نمی‌آمد (علتِ نمایش‌نشدنِ شماره‌ها/بولت‌ها).
+                ListType = source.ListType,
+                ListLevel = source.ListLevel,
+                ListMarker = source.ListMarker,
                 Spans = new List<SpanData>()
             };
         }
