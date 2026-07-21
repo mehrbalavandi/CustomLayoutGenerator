@@ -272,7 +272,15 @@ namespace WordToJsonParser
                     // است، برای هر نوع لیستی درست کار می‌کند).
                     if (i > 0 && !string.IsNullOrEmpty(p.ListMarker))
                     {
-                        var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + " " };
+                        // 🐞 رفع باگِ گزارش‌شده (بولد‌نبودنِ شماره‌های ۲ به بعد):
+                        // چون این SpanData یک متنِ معمولیِ تازه‌ساز است، نه یک
+                        // run واقعیِ کپی‌شده از سند، بدونِ این مارکر به‌صورتِ
+                        // پیش‌فرض normal-weight رندر می‌شد؛ در حالی‌که در Word
+                        // شماره‌های لیست بولد بودند (و شماره‌ی خطِ اول هم چون
+                        // در Flutter هاردکد بولد است، بولد دیده می‌شد — همین
+                        // ناهم‌خوانی، فقط شماره‌ی اول بولد/بقیه عادی، دقیقاً
+                        // چیزی بود که در اسکرین‌شات دیده شد).
+                        var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + " ", Markers = new List<string> { "b" } };
                         blankParentSpan.InnerSpans.Add(markerSpan);
                         combinedRawText += p.ListMarker + " ";
                     }
