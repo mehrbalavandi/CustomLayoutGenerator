@@ -118,6 +118,21 @@ namespace WordToJsonParser
             return LevelOf(abs, level)?.StartNumberingValue?.Val?.Value ?? 1;
         }
 
+        /// <summary>
+        /// تورفتگیِ سطحِ لیست (left/hanging به twip) — برای زمانی که خودِ پاراگراف
+        /// override نداشته باشد و باید از تعریفِ سطحِ numbering استفاده شود.
+        /// </summary>
+        public (double? LeftTwips, double? HangingTwips)? LevelIndent(int numId, int level)
+        {
+            if (!_absByNum.TryGetValue(numId, out var abs)) return null;
+            var lvlDef = LevelOf(abs, level);
+            var ind = lvlDef?.PreviousParagraphProperties?.Indentation;
+            if (ind == null) return null;
+            double? left = (ind.Left != null && double.TryParse(ind.Left.Value, out double l)) ? l : null;
+            double? hanging = (ind.Hanging != null && double.TryParse(ind.Hanging.Value, out double h)) ? h : null;
+            return (left, hanging);
+        }
+
         private static Level LevelOf(AbstractNum abs, int level) =>
             abs.Elements<Level>().FirstOrDefault(l => l.LevelIndex?.Value == level);
 

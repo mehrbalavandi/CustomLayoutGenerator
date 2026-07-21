@@ -257,6 +257,26 @@ namespace WordToJsonParser
                 for (int i = 0; i < group.Count; i++)
                 {
                     var p = group[i];
+
+                    // 🐞 رفع باگِ گم‌شدنِ شماره‌های ۲ به بعد: merged فقط مارکرِ
+                    // group[0] را نگه می‌دارد (در CloneParagraphProperties)، پس
+                    // بدونِ این تزریق، ListMarker خودِ این پاراگراف (که
+                    // NumberingResolver/Numbering(...).Next(...) پیش‌تر برایش
+                    // به‌درستی محاسبه کرده، مثلاً "2:"، "3:") برای همیشه دور
+                    // ریخته می‌شد و در JSON اصلاً ظاهر نمی‌شد. این‌جا همان
+                    // مارکرِ واقعیِ Word را مستقیماً به‌صورتِ متنِ معمولی، درست
+                    // قبل از محتوای همان پاراگراف، در ترکیب می‌گذاریم — همینه
+                    // که JSON خودش کامل و خودکفا می‌ماند و سمتِ Flutter مجبور
+                    // نیست شماره را حدس بزند یا افزایش بدهد (که برای بولت/حرف
+                    // اصلاً معنا ندارد، ولی این‌جا چون مارکرِ واقعیِ همان خط
+                    // است، برای هر نوع لیستی درست کار می‌کند).
+                    if (i > 0 && !string.IsNullOrEmpty(p.ListMarker))
+                    {
+                        var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + " " };
+                        blankParentSpan.InnerSpans.Add(markerSpan);
+                        combinedRawText += p.ListMarker + " ";
+                    }
+
                     foreach (var span in p.Spans)
                     {
                         if (span.Type == "text")
