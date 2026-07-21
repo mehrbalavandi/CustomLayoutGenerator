@@ -280,9 +280,15 @@ namespace WordToJsonParser
                         // در Flutter هاردکد بولد است، بولد دیده می‌شد — همین
                         // ناهم‌خوانی، فقط شماره‌ی اول بولد/بقیه عادی، دقیقاً
                         // چیزی بود که در اسکرین‌شات دیده شد).
-                        var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + " ", Markers = new List<string> { "b" } };
+                        // 🐞 رفع باگِ ناهم‌ترازیِ تورفتگی: سمتِ Flutter برای
+                        // مارکرِ خطِ اول (که هاردکد آن‌جاست) دو فاصله بعد از
+                        // مارکر می‌گذارد، اما اینجا فقط یک فاصله گذاشته بودیم؛
+                        // همین یک فاصله‌ی کم، خط‌های ۲ به بعد را کمی جلوتر
+                        // (تورفتگیِ کمتر) از خطِ اول نشان می‌داد. با یکسان‌کردنِ
+                        // فاصله‌ها، همه‌ی خط‌ها هم‌تراز می‌شوند.
+                        var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + "  ", Markers = new List<string> { "b" } };
                         blankParentSpan.InnerSpans.Add(markerSpan);
-                        combinedRawText += p.ListMarker + " ";
+                        combinedRawText += p.ListMarker + "  ";
                     }
 
                     foreach (var span in p.Spans)
