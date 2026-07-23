@@ -1364,6 +1364,27 @@ namespace WordToJsonParser
             string filePath = Path.Combine(imageDir, fileName);
             _imageCounter++;
 
+            // 🐞 رفع باگِ گزارش‌شده: قبلاً ImageWidth/ImageHeight همیشه از روی
+            // ابعادِ پیکسلیِ فایلِ خامِ تعبیه‌شده (یا کراپِ آن) خوانده می‌شد؛
+            // وقتی کاربر فقط اندازه‌ی تصویر را در Word تغییر می‌داد (کشیدنِ
+            // لبه‌ها، بدون کراپ)، این تغییر اصلاً در JSON منعکس نمی‌شد — چون
+            // آن ویرایش فقط در <wp:extent> خودِ سند ذخیره می‌شود، نه در فایلِ
+            // تصویر. حالا همان <wp:extent> (آخرین اندازه‌ای که کاربر واقعاً
+            // در Word تنظیم کرده — و بعد از کراپ هم Word خودش این مقدار را
+            // به‌روز نگه می‌دارد) خوانده و با مبنای ۹۶ DPI (همان مبنایی که
+            // خودِ Word هنگام نمایش/تغییرِ اندازه روی صفحه استفاده می‌کند) به
+            // پیکسل تبدیل می‌شود؛ همین عدد—نه ابعادِ فایلِ خام—گزارش می‌شود.
+            int? extentWidthPx = null;
+            int? extentHeightPx = null;
+            var extent = drawing
+                .Descendants<DocumentFormat.OpenXml.Drawing.Wordprocessing.Extent>()
+                .FirstOrDefault();
+            if (extent?.Cx != null && extent?.Cy != null)
+            {
+                extentWidthPx = (int)Math.Round(extent.Cx.Value / 914400.0 * 96.0);
+                extentHeightPx = (int)Math.Round(extent.Cy.Value / 914400.0 * 96.0);
+            }
+
             using (var stream = part.GetStream())
             using (var originalImage = System.Drawing.Image.FromStream(stream))
             {
@@ -1393,13 +1414,15 @@ namespace WordToJsonParser
                                 croppedBitmap.Save(filePath);
                             }
                         }
-                        // 🌟 بازگرداندن ابعاد تصویر کراپ شده
-                        return (fileName, width, height);
+                        // 🌟 اگر extent در دسترس بود همان (آخرینِ ویرایشِ واقعیِ
+                        // کاربر در Word) گزارش می‌شود؛ وگرنه (خیلی نادر، مثلاً
+                        // اگر سند extent نداشته باشد) ابعادِ کراپ‌شده‌ی خامِ
+                        // فایل به‌عنوان fallback باقی می‌ماند.
+                        return (fileName, extentWidthPx ?? width, extentHeightPx ?? height);
                     }
                 }
                 originalImage.Save(filePath);
-                // 🌟 بازگرداندن ابعاد تصویر اصلی
-                return (fileName, originalImage.Width, originalImage.Height);
+                return (fileName, extentWidthPx ?? originalImage.Width, extentHeightPx ?? originalImage.Height);
             }
         }
 
