@@ -26,6 +26,16 @@ namespace WordToJsonParser
         // متغیرهای مدیریت صوتی و جای‌خالی
         private string _activeAudioTrack = null;
         private ParagraphData _lastAudioParagraph = null;
+        // 🐞 برای حالتِ جدیدِ «مارکر در سطحِ اسپن» (هایلایتِ کلمه‌به‌کلمه):
+        // چون یک بازه‌ی زمانیِ واحد می‌تواند چند اسپنِ متفاوت‌استایل داشته
+        // باشد (مثلاً «the **quick** fox» همه داخلِ یک بازه)، همه‌ی
+        // اسپن‌هایی که از آخرین مارکر تا الان ساخته شده‌اند را نگه می‌داریم
+        // تا وقتی مارکرِ بعدی رسید، EndMsِ همه‌شان یک‌جا پر شود — نه فقط
+        // آخری. این لیست بینِ چند فراخوانیِ ParseParagraph هم باید بماند
+        // (برای وقتی یک قسمت از وسطِ یک پاراگرافِ Word به پاراگرافِ بعدی
+        // ادامه پیدا می‌کند)، پس در سطحِ کلاس است.
+        private List<SpanData> _pendingAudioSpans = new List<SpanData>();
+        private int? _pendingAudioSpanStartMs = null;
         private HashSet<ParagraphData> _blankWord2Set = new HashSet<ParagraphData>();
 
         public void ResetCounters()
@@ -35,6 +45,8 @@ namespace WordToJsonParser
             _imageCounter = 1;
             _activeAudioTrack = null;
             _lastAudioParagraph = null;
+            _pendingAudioSpans = new List<SpanData>();
+            _pendingAudioSpanStartMs = null;
             _blankWord2Set.Clear();
         }
 
@@ -72,7 +84,7 @@ namespace WordToJsonParser
                             page.Paragraphs = MergeBlankWord2Paragraphs(page.Paragraphs);
                         }
 
-                        List<ParagraphData> audioScripts = new List<ParagraphData>();
+                        List<AudioScriptTrack> audioScripts = new List<AudioScriptTrack>();
 
                         // ۲. دریافت فایل صوتی در صورت نیاز
                         DialogResult hasAudio = MessageBox.Show(
@@ -90,8 +102,12 @@ namespace WordToJsonParser
                                 if (audioDialog.ShowDialog() == DialogResult.OK)
                                 {
                                     audioScripts = ProcessAudioScriptWordFile(audioDialog.FileName, outputDir);
-                                    // ادغام پاراگراف‌های BlankWord2 برای اسکریپت‌های صوتی
-                                    audioScripts = MergeBlankWord2Paragraphs(audioScripts);
+                                    // ادغام پاراگراف‌های BlankWord2 — حالا به‌ازای هر تراک/فایل
+                                    // جداگانه (چون خروجی دیگر یک لیستِ تخت نیست)
+                                    foreach (var track in audioScripts)
+                                    {
+                                        track.Paragraphs = MergeBlankWord2Paragraphs(track.Paragraphs);
+                                    }
                                 }
                             }
                         }
@@ -173,9 +189,9 @@ namespace WordToJsonParser
             return pages;
         }
 
-        private List<ParagraphData> ProcessAudioScriptWordFile(string filepath, string outputDir)
+        private List<AudioScriptTrack> ProcessAudioScriptWordFile(string filepath, string outputDir)
         {
-            var audioScripts = new List<ParagraphData>();
+            var tracks = new List<AudioScriptTrack>();
 
             using (WordprocessingDocument wordDoc = WordprocessingDocument.Open(filepath, false))
             {
@@ -183,35 +199,17 @@ namespace WordToJsonParser
                 var resolver = new FontResolver(wordDoc);
                 var body = mainPart.Document.Body;
 
-                void ProcessOneParagraph(Paragraph p)
-                {
-                    bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
-                    var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, true);
-
-                    // 🌟 فیلتر پاراگراف‌های زباله و نامرئی
-                    parsedParas.RemoveAll(pr =>
-                        pr.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
-                        pr.StartMs == null);
-
-                    if (parsedParas.Count > 0)
-                    {
-                        audioScripts.AddRange(parsedParas);
-                        if (isBlankWord2)
-                        {
-                            foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
-                        }
-                    }
-                }
-
-                // 🐞 حالتِ جدید: یک جدولِ دوردیفه به‌ازای هر فایلِ صوتی — ردیفِ
-                // اول نامِ فایل (متنِ ساده، بدونِ نیاز به مارکرِ [AudioStart:...])
-                // و ردیفِ دوم متنِ اسکریپت با مارکرهای [میلی‌ثانیه] (همان
-                // مارکرهایی که ParseParagraph از قبل برای حالتِ قدیمی هم
-                // می‌فهمد: [0]، [1250]، یا [MM:SS])؛ استایل‌ها هم چون از همان
-                // ParseParagraphِ سندِ اصلی رد می‌شوند، دقیقاً مثلِ سندِ اصلی
-                // استخراج می‌شوند (بولد/ایتالیک/رنگ/فونت/سایز). چون این
-                // جدول‌ها ممکن است هرجایی از سند باشند، از Descendants<Table>
-                // استفاده می‌کنیم نه فقط Elements سطحِ‌بالا.
+                // 🐞 حالتِ جدید (اصلی): یک جدولِ دوردیفه به‌ازای هر فایلِ صوتی —
+                // ردیفِ اول نامِ فایل (متنِ ساده، بدونِ نیاز به مارکرِ
+                // [AudioStart:...]) و ردیفِ دوم متنِ اسکریپت با مارکرهای
+                // [میلی‌ثانیه] که حالا در سطحِ اسپن اعمال می‌شوند (کلمه‌به‌کلمه
+                // یا هر دانه‌بندیِ دیگری که کاربر با فاصله‌ی مارکرها تعیین
+                // کند)، نه دیگر پاراگراف‌به‌پاراگراف. استایل‌ها هم چون از
+                // همان ParseParagraphِ سندِ اصلی رد می‌شوند، دقیقاً مثلِ سندِ
+                // اصلی استخراج می‌شوند. چون این جدول‌ها ممکن است هرجایی از
+                // سند باشند، از Descendants<Table> استفاده می‌کنیم نه فقط
+                // Elements سطحِ‌بالا. AudioTrackName این‌جا فقط یک‌بار (سطحِ
+                // خودِ AudioScriptTrack) نوشته می‌شود، نه به‌ازای هر پاراگراف/اسپن.
                 var scriptTables = body.Descendants<Table>().ToList();
                 foreach (var table in scriptTables)
                 {
@@ -221,42 +219,101 @@ namespace WordToJsonParser
                     string trackName = rows[0].InnerText.Trim();
                     if (string.IsNullOrEmpty(trackName)) continue;
 
-                    // 🐞 شروعِ تازه برای این فایل: _activeAudioTrack و
-                    // _lastAudioParagraph فیلدهای سطحِ‌کلاس‌اند و بینِ چند
-                    // جدول/فایل به اشتراک گذاشته می‌شوند. بدونِ این ریست،
-                    // اگر ردیفِ دومِ این جدول (که طبقِ طراحیِ جدید نیازی به
-                    // [AudioStart:...] ندارد) با یک مارکرِ زمان شروع شود، یا
-                    // قسمت‌های اولش اشتباهاً به‌نامِ فایلِ جدولِ قبلی ثبت
-                    // می‌شدند، یا آخرین قسمتِ فایلِ قبلی هیچ‌وقت EndMs
-                    // نمی‌گرفت.
-                    if (_lastAudioParagraph != null && _lastAudioParagraph.EndMs == null)
-                        _lastAudioParagraph.EndMs = 9999999;
-                    _activeAudioTrack = trackName;
-                    _lastAudioParagraph = null;
+                    // 🐞 شروعِ تازه برای این فایل: _pendingAudioSpans فیلدِ
+                    // سطحِ‌کلاس است و بینِ چند جدول/فایل به اشتراک گذاشته
+                    // می‌شود. بدونِ این ریست، اگر آخرین بازه‌ی جدولِ قبلی هیچ‌وقت
+                    // مارکرِ بسته‌شدن نگرفته باشد، یا EndMsَش برای همیشه خالی
+                    // می‌ماند یا اشتباهاً به جدولِ بعدی درز می‌کند.
+                    foreach (var pendingSpan in _pendingAudioSpans)
+                        if (pendingSpan.EndMs == null) pendingSpan.EndMs = 9999999;
+                    _pendingAudioSpans.Clear();
+                    _pendingAudioSpanStartMs = null;
+
+                    var track = new AudioScriptTrack { AudioTrackName = trackName };
 
                     foreach (var cell in rows[1].Elements<TableCell>())
                     {
                         foreach (var p in cell.Elements<Paragraph>())
                         {
-                            ProcessOneParagraph(p);
+                            bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
+                            var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, inTable: true, audioMarkersAsSpans: true);
+
+                            // 🌟 فیلتر پاراگراف‌های زباله و نامرئی (چون در این
+                            // حالت StartMs روی خودِ اسپن‌هاست، نه پاراگراف)
+                            parsedParas.RemoveAll(pr =>
+                                pr.Spans.Count == 0 ||
+                                pr.Spans.All(s => string.IsNullOrWhiteSpace(s.Content)));
+
+                            if (parsedParas.Count > 0)
+                            {
+                                track.Paragraphs.AddRange(parsedParas);
+                                if (isBlankWord2)
+                                {
+                                    foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
+                                }
+                            }
                         }
                     }
+
+                    if (track.Paragraphs.Count > 0)
+                        tracks.Add(track);
                 }
+
+                foreach (var pendingSpan in _pendingAudioSpans)
+                    if (pendingSpan.EndMs == null) pendingSpan.EndMs = 9999999;
+                _pendingAudioSpans.Clear();
+                _pendingAudioSpanStartMs = null;
 
                 // 🐞 حالتِ قدیمی (سازگاریِ رو‌به‌عقب): پاراگراف‌های سطحِ‌بالای
                 // سند که مستقیماً با [AudioStart: نام] شروع می‌شوند، همچنان
                 // پردازش می‌شوند — برای اسکریپت‌هایی که قبلاً به این روش
-                // نوشته شده‌اند.
+                // نوشته شده‌اند. این مسیر همچنان پاراگراف‌محور است (هر بازه =
+                // یک پاراگراف مستقل با AudioTrackName خودش)؛ در پایان بر
+                // اساسِ همان AudioTrackName گروه‌بندی می‌شود تا خروجی‌اش هم به
+                // شکلِ AudioScriptTrack باشد.
+                var legacyParas = new List<ParagraphData>();
                 foreach (var p in body.Elements<Paragraph>())
                 {
-                    ProcessOneParagraph(p);
+                    bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
+                    var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, inTable: false, audioMarkersAsSpans: false);
+
+                    parsedParas.RemoveAll(pr =>
+                        pr.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
+                        pr.StartMs == null);
+
+                    if (parsedParas.Count > 0)
+                    {
+                        legacyParas.AddRange(parsedParas);
+                        if (isBlankWord2)
+                        {
+                            foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
+                        }
+                    }
                 }
 
                 if (_lastAudioParagraph != null && _lastAudioParagraph.EndMs == null)
                     _lastAudioParagraph.EndMs = 9999999;
+
+                var legacyTrackOrder = new List<string>();
+                var legacyByTrack = new Dictionary<string, AudioScriptTrack>();
+                foreach (var pr in legacyParas)
+                {
+                    string tn = pr.AudioTrackName ?? "";
+                    if (!legacyByTrack.TryGetValue(tn, out var trk))
+                    {
+                        trk = new AudioScriptTrack { AudioTrackName = tn };
+                        legacyByTrack[tn] = trk;
+                        legacyTrackOrder.Add(tn);
+                    }
+                    trk.Paragraphs.Add(pr);
+                }
+                foreach (var tn in legacyTrackOrder)
+                {
+                    tracks.Add(legacyByTrack[tn]);
+                }
             }
 
-            return audioScripts;
+            return tracks;
         }
 
         // ==========================================
@@ -411,7 +468,7 @@ namespace WordToJsonParser
             return result;
         }
 
-        public List<ParagraphData> ParseParagraph(Paragraph p, MainDocumentPart mainPart, FontResolver resolver, string outputDir, bool inTable = false)
+        public List<ParagraphData> ParseParagraph(Paragraph p, MainDocumentPart mainPart, FontResolver resolver, string outputDir, bool inTable = false, bool audioMarkersAsSpans = false)
         {
             var basePara = new ParagraphData();
 
@@ -540,10 +597,81 @@ namespace WordToJsonParser
                 }
             }
 
+            string combinedPattern = @"(\[AudioStart:\s*.+?\]|\[(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[\d+\]|\[AudioEnd:\s*(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[AudioEnd\])";
+
+            // 🐞 حالتِ جدید: به‌جای شکستنِ متن به چند پاراگرافِ جدا (که فقط
+            // دانه‌بندیِ جمله‌به‌جمله را ممکن می‌کرد و AudioTrackName/سایرِ
+            // فیلدهای پاراگرافی را هم به‌ازای هر تکه تکرار می‌کرد)، همین یک
+            // پاراگراف را نگه می‌داریم و StartMs/EndMs را روی خودِ اسپن‌ها
+            // می‌گذاریم — این‌طوری هم هایلایتِ کلمه‌به‌کلمه ممکن می‌شود، هم
+            // استایلِ هر اسپن (که از CloneSpan روی همان run اصلی می‌آید)
+            // دست‌نخورده می‌ماند.
+            if (audioMarkersAsSpans)
+            {
+                var onlyPara = CloneParagraphProperties(basePara);
+                onlyPara.Spans = new List<SpanData>();
+
+                if (!basePara.Spans.Any())
+                    return new List<ParagraphData> { onlyPara };
+
+                foreach (var span in basePara.Spans)
+                {
+                    if (span.Type != "text" || string.IsNullOrEmpty(span.Content))
+                    {
+                        onlyPara.Spans.Add(span);
+                        continue;
+                    }
+
+                    var msParts = Regex.Split(span.Content, combinedPattern, RegexOptions.IgnoreCase);
+                    foreach (var part in msParts)
+                    {
+                        if (string.IsNullOrEmpty(part)) continue;
+
+                        var timeMatch2 = Regex.Match(part, @"\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2}(?:\.\d+)?)\]");
+                        var msMatch2 = Regex.Match(part, @"\[(\d+)\]");
+
+                        if (timeMatch2.Success || msMatch2.Success)
+                        {
+                            int ms;
+                            if (timeMatch2.Success)
+                            {
+                                int h = timeMatch2.Groups[1].Success ? int.Parse(timeMatch2.Groups[1].Value) : 0;
+                                int m = int.Parse(timeMatch2.Groups[2].Value);
+                                double s = double.Parse(timeMatch2.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+                                ms = (int)((h * 3600 + m * 60 + s) * 1000);
+                            }
+                            else
+                            {
+                                ms = int.Parse(msMatch2.Groups[1].Value);
+                            }
+
+                            // بستنِ همه‌ی اسپن‌های معلقِ بازه‌ی قبلی با همین زمان
+                            // (ممکن است چند اسپنِ متفاوت‌استایل باشند، نه فقط یکی)
+                            foreach (var pendingSpan in _pendingAudioSpans) pendingSpan.EndMs = ms;
+                            _pendingAudioSpans.Clear();
+                            _pendingAudioSpanStartMs = ms;
+                        }
+                        else
+                        {
+                            var newSpan = CloneSpan(span);
+                            newSpan.Content = (onlyPara.Spans.Count == 0) ? part.TrimStart() : part;
+                            if (string.IsNullOrEmpty(newSpan.Content)) continue;
+                            newSpan.StartMs = _pendingAudioSpanStartMs;
+                            onlyPara.Spans.Add(newSpan);
+                            _pendingAudioSpans.Add(newSpan);
+                        }
+                    }
+                }
+
+                if (onlyPara.Spans.Count == 0)
+                    onlyPara.Spans.Add(new SpanData { Type = "text", Content = "" });
+
+                return new List<ParagraphData> { onlyPara };
+            }
+
             var result = new List<ParagraphData>();
             var currentPara = CloneParagraphProperties(basePara);
             bool trackEndedHere = false;
-            string combinedPattern = @"(\[AudioStart:\s*.+?\]|\[(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[\d+\]|\[AudioEnd:\s*(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[AudioEnd\])";
 
             if (!basePara.Spans.Any())
             {

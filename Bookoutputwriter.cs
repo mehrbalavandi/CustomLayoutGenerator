@@ -29,7 +29,7 @@ namespace WordToJsonParser
         public static void Write(
             string outputDir,
             List<PageData> pages,
-            List<ParagraphData> audioScripts,
+            List<AudioScriptTrack> audioScripts,
             object interactives = null)   // دیکشنری Interactives سطح کتاب (توسط مرحلهٔ AI پر می‌شود)
         {
             var pagesDir = Path.Combine(outputDir, "pages");
@@ -87,7 +87,7 @@ namespace WordToJsonParser
         public string BookVersion { get; set; }
         public List<PageIndexEntry> Pages { get; set; } = new List<PageIndexEntry>();
         public object Interactives { get; set; }                 // null اگر هنوز تولید نشده
-        public List<ParagraphData> AudioScripts { get; set; }    // سطح کتاب
+        public List<AudioScriptTrack> AudioScripts { get; set; }  // سطح کتاب — یک آیتم به‌ازای هر فایلِ صوتی
     }
 
     public class PageIndexEntry

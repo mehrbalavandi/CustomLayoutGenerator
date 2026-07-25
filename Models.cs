@@ -36,12 +36,30 @@ namespace WordToJsonParser
         public List<SpanData> Spans { get; set; } = new List<SpanData>();
     }
 
+    public class AudioScriptTrack
+    {
+        public string AudioTrackName { get; set; }
+        public List<ParagraphData> Paragraphs { get; set; } = new List<ParagraphData>();
+    }
+
     public class SpanData
     {
         public string Type { get; set; }
         public string Content { get; set; }
         public List<string> Markers { get; set; } = new List<string>();
         public string Url { get; set; }
+
+        // 🐞 برای هایلایتِ همگام‌سازی‌شده در سطحِ اسپن (کلمه‌به‌کلمه یا هر
+        // دانه‌بندیِ دیگری که کاربر با مارکرهای [میلی‌ثانیه] بین کلمات تعیین
+        // کند) — قبلاً StartMs/EndMs فقط در سطحِ پاراگراف بود، یعنی هر
+        // قسمتِ هایلایت‌شونده باید یک پاراگرافِ کاملاً جدا می‌شد (فقط
+        // جمله‌به‌جمله معنا داشت، چون هر پاراگراف کلی از فیلدهای تکراری
+        // مثلِ Direction/Alignment/SpaceAfter و AudioTrackName را هم با
+        // خودش می‌آورد). حالا این دو فیلد در سطحِ اسپن هم هست، پس یک
+        // پاراگرافِ واحد می‌تواند چند اسپن داشته باشد که هرکدام بازه‌ی
+        // زمانیِ خودشان را دارند.
+        public int? StartMs { get; set; }
+        public int? EndMs { get; set; }
 
         public int? ImageWidth { get; set; }
         public int? ImageHeight { get; set; }
