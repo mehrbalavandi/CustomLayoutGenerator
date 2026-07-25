@@ -181,13 +181,12 @@ namespace WordToJsonParser
             {
                 MainDocumentPart mainPart = wordDoc.MainDocumentPart;
                 var resolver = new FontResolver(wordDoc);
-                var paragraphs = mainPart.Document.Body.Elements<Paragraph>();
+                var body = mainPart.Document.Body;
 
-                foreach (var p in paragraphs)
+                void ProcessOneParagraph(Paragraph p)
                 {
                     bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
-
-                    var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, false);
+                    var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, true);
 
                     // 🌟 فیلتر پاراگراف‌های زباله و نامرئی
                     parsedParas.RemoveAll(pr =>
@@ -197,13 +196,64 @@ namespace WordToJsonParser
                     if (parsedParas.Count > 0)
                     {
                         audioScripts.AddRange(parsedParas);
-
                         if (isBlankWord2)
                         {
                             foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
                         }
                     }
                 }
+
+                // 🐞 حالتِ جدید: یک جدولِ دوردیفه به‌ازای هر فایلِ صوتی — ردیفِ
+                // اول نامِ فایل (متنِ ساده، بدونِ نیاز به مارکرِ [AudioStart:...])
+                // و ردیفِ دوم متنِ اسکریپت با مارکرهای [میلی‌ثانیه] (همان
+                // مارکرهایی که ParseParagraph از قبل برای حالتِ قدیمی هم
+                // می‌فهمد: [0]، [1250]، یا [MM:SS])؛ استایل‌ها هم چون از همان
+                // ParseParagraphِ سندِ اصلی رد می‌شوند، دقیقاً مثلِ سندِ اصلی
+                // استخراج می‌شوند (بولد/ایتالیک/رنگ/فونت/سایز). چون این
+                // جدول‌ها ممکن است هرجایی از سند باشند، از Descendants<Table>
+                // استفاده می‌کنیم نه فقط Elements سطحِ‌بالا.
+                var scriptTables = body.Descendants<Table>().ToList();
+                foreach (var table in scriptTables)
+                {
+                    var rows = table.Elements<TableRow>().ToList();
+                    if (rows.Count < 2) continue;
+
+                    string trackName = rows[0].InnerText.Trim();
+                    if (string.IsNullOrEmpty(trackName)) continue;
+
+                    // 🐞 شروعِ تازه برای این فایل: _activeAudioTrack و
+                    // _lastAudioParagraph فیلدهای سطحِ‌کلاس‌اند و بینِ چند
+                    // جدول/فایل به اشتراک گذاشته می‌شوند. بدونِ این ریست،
+                    // اگر ردیفِ دومِ این جدول (که طبقِ طراحیِ جدید نیازی به
+                    // [AudioStart:...] ندارد) با یک مارکرِ زمان شروع شود، یا
+                    // قسمت‌های اولش اشتباهاً به‌نامِ فایلِ جدولِ قبلی ثبت
+                    // می‌شدند، یا آخرین قسمتِ فایلِ قبلی هیچ‌وقت EndMs
+                    // نمی‌گرفت.
+                    if (_lastAudioParagraph != null && _lastAudioParagraph.EndMs == null)
+                        _lastAudioParagraph.EndMs = 9999999;
+                    _activeAudioTrack = trackName;
+                    _lastAudioParagraph = null;
+
+                    foreach (var cell in rows[1].Elements<TableCell>())
+                    {
+                        foreach (var p in cell.Elements<Paragraph>())
+                        {
+                            ProcessOneParagraph(p);
+                        }
+                    }
+                }
+
+                // 🐞 حالتِ قدیمی (سازگاریِ رو‌به‌عقب): پاراگراف‌های سطحِ‌بالای
+                // سند که مستقیماً با [AudioStart: نام] شروع می‌شوند، همچنان
+                // پردازش می‌شوند — برای اسکریپت‌هایی که قبلاً به این روش
+                // نوشته شده‌اند.
+                foreach (var p in body.Elements<Paragraph>())
+                {
+                    ProcessOneParagraph(p);
+                }
+
+                if (_lastAudioParagraph != null && _lastAudioParagraph.EndMs == null)
+                    _lastAudioParagraph.EndMs = 9999999;
             }
 
             return audioScripts;
