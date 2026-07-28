@@ -62,11 +62,73 @@ namespace WordToJsonParser
                 BookVersion = ShortHash(string.Concat(manifest.Select(m => m.Version))),
                 Pages = manifest,
                 Interactives = interactives,
-                AudioScripts = audioScripts
+                AudioScripts = audioScripts,
+                // 🐞 شاخصِ سطحِ‌کتابِ لینک‌های صوتیِ داخلِ متن — دقیقاً همان
+                // چیزی که سمتِ فلاتر (buildBookAudioPlaylist) قبلاً مجبور
+                // بود با گشتنِ زنده در محتوای *همه‌ی* صفحاتِ لودشده بسازد؛
+                // چون این کار نیازِ به لودِ کاملِ کتاب دارد، مانعِ اصلیِ
+                // لودِ تنبل/صفحه‌به‌صفحه بود. حالا از قبل، همین‌جا در زمانِ
+                // استخراج، محاسبه و در index.json نوشته می‌شود.
+                AudioLinksIndex = BuildAudioLinksIndex(pages)
             };
 
             string indexJson = JsonConvert.SerializeObject(index, Formatting.Indented, Settings);
             File.WriteAllText(Path.Combine(outputDir, "index.json"), indexJson);
+        }
+
+        // 🐞 اسکنِ یک‌بارِ کلِ کتاب (شاملِ پاراگراف‌های داخلِ سلول‌های جدول،
+        // به‌صورتِ بازگشتی) برای هر اسپنی که Url اش با "audio:" شروع می‌شود —
+        // همان قراردادی که هایپرلینک‌های صوتیِ داخلِ متن با آن مشخص می‌شوند.
+        // موقعیتِ گزارش‌شده همیشه ParaIndexِ پاراگرافِ *بیرونی* است (نه اندیسِ
+        // داخلیِ سلول)، چون این دقیقاً همان قراردادی است که سمتِ فلاتر برای
+        // «برو به متن» استفاده می‌کند.
+        private static List<AudioLinkEntry> BuildAudioLinksIndex(List<PageData> pages)
+        {
+            var result = new List<AudioLinkEntry>();
+
+            void ScanSpans(List<SpanData> spans, int pageNumber, int topParaIndex)
+            {
+                if (spans == null) return;
+                foreach (var s in spans)
+                {
+                    if (!string.IsNullOrEmpty(s.Url) && s.Url.StartsWith("audio:"))
+                    {
+                        string fileName = s.Url.Substring("audio:".Length);
+                        if (!string.IsNullOrEmpty(fileName))
+                        {
+                            result.Add(new AudioLinkEntry
+                            {
+                                PageNumber = pageNumber,
+                                ParaIndex = topParaIndex,
+                                FileName = fileName
+                            });
+                        }
+                    }
+                    if (s.Type == "table" && s.TableRows != null)
+                    {
+                        foreach (var row in s.TableRows)
+                        {
+                            foreach (var cell in row.Cells)
+                            {
+                                foreach (var p in cell.Paragraphs)
+                                {
+                                    ScanSpans(p.Spans, pageNumber, topParaIndex);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            foreach (var page in pages)
+            {
+                for (int i = 0; i < page.Paragraphs.Count; i++)
+                {
+                    ScanSpans(page.Paragraphs[i].Spans, page.PageNumber, i);
+                }
+            }
+
+            return result;
         }
 
         private static string ShortHash(string content)
@@ -88,6 +150,7 @@ namespace WordToJsonParser
         public List<PageIndexEntry> Pages { get; set; } = new List<PageIndexEntry>();
         public object Interactives { get; set; }                 // null اگر هنوز تولید نشده
         public List<AudioScriptTrack> AudioScripts { get; set; }  // سطح کتاب — یک آیتم به‌ازای هر فایلِ صوتی
+        public List<AudioLinkEntry> AudioLinksIndex { get; set; }  // سطح کتاب — کجای متن دکمه‌ی صوتی هست
     }
 
     public class PageIndexEntry

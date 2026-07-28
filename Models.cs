@@ -36,6 +36,13 @@ namespace WordToJsonParser
         public List<SpanData> Spans { get; set; } = new List<SpanData>();
     }
 
+    public class AudioLinkEntry
+    {
+        public int PageNumber { get; set; }
+        public int ParaIndex { get; set; }
+        public string FileName { get; set; }  // بدونِ پیشوندِ "audio:"
+    }
+
     public class AudioScriptTrack
     {
         public string AudioTrackName { get; set; }
