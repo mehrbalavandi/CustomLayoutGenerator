@@ -87,7 +87,7 @@ namespace WordToJsonParser
                     // است)، ولی همه‌ی بوردرهایش باید دیده شوند — پس فقط
                     // بوردرِ پیش‌فرض را ست می‌کنیم، بدونِ ResponsiveStrategy.
                     span.Borders = span.Borders ?? new BorderDetail();
-                    if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    //if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
                     break;
 
                 case "TipTable":
