@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 
 namespace WordToJsonParser
@@ -55,6 +56,58 @@ namespace WordToJsonParser
                 });
             }
 
+            // 🐞 هر تراکِ اسکریپتِ صوتی، یک فایلِ مستقل و page-like (همان
+            // شکلِ {PageNumber, Paragraphs}) می‌گیرد — ولی برخلافِ نسخه‌ی
+            // قبلی، دیگر داخلِ pages/ نوشته نمی‌شود؛ یک پوشه‌ی جداگانه
+            // (audio_scripts/) کنارِ pages/ دارد. علتش: پنلِ ادمینِ
+            // لاراول/فیلامنت (BookResource.php) تعدادِ فایل‌های pages/ را
+            // به‌عنوانِ «تعدادِ صفحات» می‌شمارد — اگر اسکریپت‌های صوتی هم
+            // آن‌جا بودند، این شمارش اشتباه می‌شد. ضمناً نامِ فایل هم‌نام
+            // با خودِ فایلِ صوتی است (نه یک شماره‌ی دنباله‌دار) تا از رویِ
+            // اسم قابلِ‌ردیابی باشد. سرورِ لاراول (BookController::download)
+            // کاملاً عمومی/مسیرمحور است و به نامِ پوشه اهمیتی نمی‌دهد، پس
+            // این تغییر نیازی به اصلاحِ آن سمت ندارد — فقط شمارشگرِ نمایشیِ
+            // پنلِ ادمین (اختیاری) بهتر است یک ردیفِ مشابه برای همین پوشه
+            // اضافه کند.
+            var audioScriptsDir = Path.Combine(outputDir, "audio_scripts");
+            Directory.CreateDirectory(audioScriptsDir);
+
+            var audioTrackEntries = new List<AudioScriptTrackEntry>();
+            var usedAudioFileNames = new HashSet<string>();
+            for (int i = 0; i < audioScripts.Count; i++)
+            {
+                var track = audioScripts[i];
+                string baseName = Path.GetFileNameWithoutExtension(track.AudioTrackName ?? "");
+                string safeName = Regex.Replace(baseName, @"[^a-zA-Z0-9_\-\.]", "_");
+                if (string.IsNullOrWhiteSpace(safeName)) safeName = $"track_{i:D4}";
+                string candidate = safeName;
+                int dupSuffix = 2;
+                // 🐞 اگر دو فایلِ صوتیِ متفاوت بعدِ پاکسازیِ نام یکی شوند
+                // (نامِ عجیب/تکراری)، به‌جای بازنویسیِ رویِ همدیگر، پسوندِ
+                // عددی می‌گیرند.
+                while (!usedAudioFileNames.Add(candidate))
+                {
+                    candidate = $"{safeName}_{dupSuffix}";
+                    dupSuffix++;
+                }
+                string audioFileName = $"{candidate}.json";
+
+                var pageLike = new PageData
+                {
+                    PageNumber = i,
+                    Paragraphs = track.Paragraphs
+                };
+                string audioJson = JsonConvert.SerializeObject(pageLike, Formatting.None, Settings);
+                File.WriteAllText(Path.Combine(audioScriptsDir, audioFileName), audioJson);
+
+                audioTrackEntries.Add(new AudioScriptTrackEntry
+                {
+                    AudioTrackName = track.AudioTrackName,
+                    File = $"audio_scripts/{audioFileName}",
+                    Version = ShortHash(audioJson)
+                });
+            }
+
             var index = new BookIndex
             {
                 SchemaVersion = 2,
@@ -62,7 +115,7 @@ namespace WordToJsonParser
                 BookVersion = ShortHash(string.Concat(manifest.Select(m => m.Version))),
                 Pages = manifest,
                 Interactives = interactives,
-                AudioScripts = audioScripts,
+                AudioScripts = audioTrackEntries,
                 // 🐞 شاخصِ سطحِ‌کتابِ لینک‌های صوتیِ داخلِ متن — دقیقاً همان
                 // چیزی که سمتِ فلاتر (buildBookAudioPlaylist) قبلاً مجبور
                 // بود با گشتنِ زنده در محتوای *همه‌ی* صفحاتِ لودشده بسازد؛
@@ -149,7 +202,7 @@ namespace WordToJsonParser
         public string BookVersion { get; set; }
         public List<PageIndexEntry> Pages { get; set; } = new List<PageIndexEntry>();
         public object Interactives { get; set; }                 // null اگر هنوز تولید نشده
-        public List<AudioScriptTrack> AudioScripts { get; set; }  // سطح کتاب — یک آیتم به‌ازای هر فایلِ صوتی
+        public List<AudioScriptTrackEntry> AudioScripts { get; set; }  // سطح کتاب — یک اشاره‌گر به‌ازای هر فایلِ صوتی (در audio_scripts/)
         public List<AudioLinkEntry> AudioLinksIndex { get; set; }  // سطح کتاب — کجای متن دکمه‌ی صوتی هست
     }
 

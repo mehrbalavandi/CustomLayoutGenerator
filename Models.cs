@@ -43,6 +43,13 @@ namespace WordToJsonParser
         public string FileName { get; set; }  // بدونِ پیشوندِ "audio:"
     }
 
+    public class AudioScriptTrackEntry
+    {
+        public string AudioTrackName { get; set; }
+        public string File { get; set; }  // مسیرِ فایلِ page-like همین تراک، داخلِ audio_scripts/
+        public string Version { get; set; }  // هَشِ محتوا — همان الگویِ PageIndexEntry
+    }
+
     public class AudioScriptTrack
     {
         public string AudioTrackName { get; set; }
