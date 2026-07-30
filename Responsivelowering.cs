@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace WordToJsonParser
+namespace CustomLayoutGenerator
 {
     /// <summary>
     /// نام‌های استایلِ جدولِ Word را به primitiveهای declarativeِ ریسپانسیو «تبدیل»

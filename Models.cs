@@ -1,6 +1,6 @@
 ﻿using System.Collections.Generic;
 
-namespace WordToJsonParser
+namespace CustomLayoutGenerator
 {
     public class PageData
     {

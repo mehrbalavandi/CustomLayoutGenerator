@@ -9,7 +9,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
-namespace WordToJsonParser
+namespace CustomLayoutGenerator
 {
 
     public partial class MainForm : Form

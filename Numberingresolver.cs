@@ -4,7 +4,7 @@ using System.Text;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
-namespace WordToJsonParser
+namespace CustomLayoutGenerator
 {
     /// <summary>
     /// Word شماره‌ی دیده‌شده‌ی لیست‌ها را در متن ذخیره نمی‌کند؛ آن را از numbering.xml و

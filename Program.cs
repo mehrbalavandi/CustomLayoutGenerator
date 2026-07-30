@@ -1,4 +1,4 @@
-namespace WordToJsonParser
+namespace CustomLayoutGenerator
 {
     internal static class Program
     {

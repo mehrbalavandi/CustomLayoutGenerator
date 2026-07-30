@@ -6,7 +6,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 
-namespace WordToJsonParser
+namespace CustomLayoutGenerator
 {
     /// <summary>
     /// خروجی را به‌جای یک فایلِ واحد، به‌صورت «یک index.json + یک فایل به‌ازای هر صفحه»

@@ -1,4 +1,4 @@
-﻿namespace WordToJsonParser
+﻿namespace CustomLayoutGenerator
 {
     partial class MainForm
     {

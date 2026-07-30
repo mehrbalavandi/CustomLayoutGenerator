@@ -2,7 +2,7 @@
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
-namespace WordToJsonParser
+namespace CustomLayoutGenerator
 {
     /*
         public class FontResolver
