@@ -97,6 +97,35 @@ namespace CustomLayoutGenerator
         public string ResponsiveStrategy { get; set; }  // "horizontalScroll" | "collapseToCards"
         public string LayoutDirection { get; set; }      // برای Type=="layout": "row" | "column"
         public string LayoutReflow { get; set; }         // "stack" | "wrap" | "none"
+
+        // 🐞 مدلِ صریح و توسعه‌پذیرِ نمایشِ جدول — جایگزینِ چک‌کردنِ نامِ
+        // استایل در فلاتر (isOutsideTable/isBorderedTable/...) با دو فیلدِ
+        // declarativeِ روشن. اضافه‌کردنِ یک حالتِ جدید در آینده یعنی فقط
+        // یک مقدارِ جدید این‌جا + یک caseِ متناظر در فلاتر، نه دست‌کاریِ
+        // پراکنده در منطقِ رندر.
+        //
+        // BorderMode — کدام لبه‌ها بوردر دارند:
+        //   "all"          → همه‌ی لبه‌های همه‌ی سلول‌ها (گریدِ کامل)
+        //   "outer"        → فقط دورتادورِ کلِ جدول، بدونِ خطوطِ داخلی
+        //   "inner"        → فقط خطوطِ داخلیِ بینِ سلول‌ها/ردیف‌ها، بدونِ بیرونی
+        //   "none"         → هیچ بوردری
+        //   "firstRowOuter"→ دورتادورِ کلِ جدول + یک خط زیرِ ردیفِ اول
+        //   null/خالی      → به دادهٔ خامِ per-cell (HasBorders/Borders) یا
+        //                    رفتارِ قدیمیِ مبتنی‌بر نامِ استایل رجوع می‌شود
+        //                    (سازگاری با کتاب‌هایی که هنوز دوباره استخراج
+        //                    نشده‌اند)
+        public string BorderMode { get; set; }
+
+        // WidthMode — عرضِ جدول/ستون‌ها چطور تعیین می‌شود:
+        //   "content"      → اندازه‌ی طبیعیِ محتوا؛ هیچ‌وقت کش نمی‌آید
+        //                    (مثلِ جعبه‌ی شمارهٔ تمرین)
+        //   "equal"        → همه‌ی ستون‌ها عرضِ مساوی از فضای دردسترس
+        //   "proportional" → هر ستون متناسب با پهن‌ترین محتوایِ خودش
+        //                    (نه لزوماً مساوی با بقیه)؛ اگر جمعِ همه از
+        //                    عرضِ صفحه بیشتر شود، اسکرولِ افقی می‌گیرد
+        //   "fill"         → پرکردنِ درصدی از عرضِ صفحه (TableWidthPercent)
+        //   null/خالی      → رفتارِ قدیمیِ مبتنی‌بر نامِ استایل
+        public string WidthMode { get; set; }
     }
 
     public class TableRowData

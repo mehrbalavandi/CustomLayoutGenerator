@@ -7,6 +7,16 @@ namespace CustomLayoutGenerator
     /// می‌کند تا فلاتر به‌جای switch روی نام استایل، فقط با چند فیلدِ عمومی کار کند.
     /// افزودن یک استایلِ جدید = یک case در این switch (بدون تغییر در فلاتر).
     /// روی spanها به‌صورت بازگشتی کار می‌کند (جدولِ تودرتو، innerSpans و سلول‌ها).
+    ///
+    /// 🐞 بازطراحیِ کامل: قبلاً فقط ResponsiveStrategy (برایِ عرض/اسکرول) و
+    /// Borders.Val (برایِ نمایش/عدم‌نمایشِ بوردر) ست می‌شد، و فلاتر برایِ
+    /// تصمیم‌های ظریف‌تر (مثلاً «فقط بوردرِ بیرونی» برایِ OutsideTable) مجبور
+    /// بود مستقیماً نامِ استایل را چک کند (isOutsideTable, isBorderedTable, ...)
+    /// — یعنی هر رفتارِ جدید نیاز به یک پرچمِ جدید در فلاتر داشت. حالا دو فیلدِ
+    /// صریح و توسعه‌پذیر اضافه شده: BorderMode (کدام لبه‌ها بوردر دارند) و
+    /// WidthMode (عرض چطور تعیین می‌شود). فلاتر فقط رویِ همین دو مقدار سوییچ
+    /// می‌کند؛ هر حالتِ آینده (مثلاً «فقط بوردرِ داخلی» یا «فقط ردیفِ اول») یعنی
+    /// فقط یک مقدارِ جدید این‌جا + یک caseِ متناظر در فلاتر.
     /// </summary>
     public static class ResponsiveLowering
     {
@@ -51,12 +61,28 @@ namespace CustomLayoutGenerator
                     span.ResponsiveStrategy = "collapseToCards";
                     span.Borders = span.Borders ?? new BorderDetail();
                     span.Borders.Val = "dotted";
+                    span.BorderMode = "all";
+                    span.WidthMode = "equal";
                     break;
 
                 case "BorderedTable":
                     span.ResponsiveStrategy = "horizontalScroll";
                     span.Borders = span.Borders ?? new BorderDetail();
                     if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "all";
+                    span.WidthMode = "fill";
+                    break;
+
+                case "CompactTable":
+                    // 🐞 برای جدول‌های تک‌سلولیِ کوچک مثلِ «شمارهٔ تمرین» (۰۱،
+                    // ۰۲، ...) که باید یک جعبهٔ کوچکِ بوردردار و
+                    // متناسب‌با‌محتوا باشند، نه یک جدولِ عریض/اسکرول‌شونده.
+                    // WidthMode="content" یعنی فلاتر هیچ‌وقت این را کش
+                    // نمی‌آورد؛ دقیقاً به‌اندازهٔ متنِ داخلش می‌ماند.
+                    span.Borders = span.Borders ?? new BorderDetail();
+                    if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "all";
+                    span.WidthMode = "content";
                     break;
 
                 case "FigureTable":
@@ -69,6 +95,8 @@ namespace CustomLayoutGenerator
                     // BorderedTable، اینجا بوردرِ پیش‌فرض اضافه نمی‌شود — یک
                     // جعبه‌ی عکس/زیرنویس معمولاً بوردر نمی‌خواهد.
                     span.ResponsiveStrategy = "horizontalScroll";
+                    span.BorderMode = "none";
+                    span.WidthMode = "fill";
                     break;
 
                 case "HBTable":
@@ -80,43 +108,65 @@ namespace CustomLayoutGenerator
                     span.ResponsiveStrategy = "horizontalScroll";
                     span.Borders = span.Borders ?? new BorderDetail();
                     if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "all";
+                    span.WidthMode = "fill";
                     break;
 
                 case "NormalTable":
                     // 🐞 بدونِ اسکرولِ افقی (فشرده‌شدنِ عادی در عرضِ صفحه کافی
-                    // است)، ولی همه‌ی بوردرهایش باید دیده شوند — پس فقط
-                    // بوردرِ پیش‌فرض را ست می‌کنیم، بدونِ ResponsiveStrategy.
+                    // است)، ولی همه‌ی بوردرهایش باید دیده شوند.
                     span.Borders = span.Borders ?? new BorderDetail();
-                    //if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "all";
+                    span.WidthMode = "equal";
                     break;
 
                 case "TipTable":
                     // 🐞 نه اسکرولِ افقی، نه بوردرِ اجباری — رفتارِ خنثی/عادی؛
                     // اگر خودِ سند بوردر دارد همان حفظ می‌شود، وگرنه چیزی
-                    // اضافه نمی‌شود.
+                    // اضافه نمی‌شود. BorderMode/WidthMode عمداً ست نمی‌شوند
+                    // (null می‌مانند) تا فلاتر به دادهٔ خامِ per-cell رجوع کند.
                     break;
 
                 case "OutsideTable":
-                    // 🐞 اسکرولِ افقی لازم دارد، ولی فقط بوردرِ دورتادورِ کلِ
-                    // جدول باید دیده شود، نه خطوطِ داخلیِ بینِ سلول‌ها/ردیف‌ها؛
-                    // سمتِ فلاتر با چک‌کردنِ نامِ استایل ("outsidetable")
-                    // تشخیص می‌دهد و بوردرِ per-row را خاموش می‌کند و به‌جایش
-                    // یک Border.all بیرونی دورِ کلِ جدول می‌کشد.
+                    // 🐞 اسکرولِ افقی لازم دارد (اگر واقعاً محتوا جا نشود)،
+                    // ولی فقط بوردرِ دورتادورِ کلِ جدول باید دیده شود، نه
+                    // خطوطِ داخلیِ بینِ سلول‌ها/ردیف‌ها. WidthMode="proportional"
+                    // یعنی هر ستون متناسب با محتوایِ خودش عرض می‌گیرد (نه
+                    // مساوی با بقیه)، تا وقتی محتوا کوتاه است له نشود و وقتی
+                    // واقعاً جا نیست به‌درستی اسکرول بگیرد.
                     span.ResponsiveStrategy = "horizontalScroll";
                     span.Borders = span.Borders ?? new BorderDetail();
                     if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "outer";
+                    span.WidthMode = "proportional";
+                    break;
+
+                // 🐞 دو حالتِ جدید که کاربر برایِ آینده خواسته بود — از قبل
+                // آماده‌اند تا وقتی در Word یک جدول را با یکی از این نام‌ها
+                // استایل داد، بلافاصله کار کند، بدونِ نیاز به تغییرِ دیگری:
+                case "InnerBorderTable":
+                    // 🐞 فقط خطوطِ داخلی (بینِ سلول‌ها/ردیف‌ها)، بدونِ بوردرِ
+                    // دورِ کلِ جدول.
+                    span.Borders = span.Borders ?? new BorderDetail();
+                    if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "inner";
+                    span.WidthMode = "equal";
+                    break;
+
+                case "FirstRowBorderTable":
+                    // 🐞 بوردرِ دورِ کلِ جدول + یک خط زیرِ ردیفِ اول (مثلاً برایِ
+                    // جدولی که فقط سرستون از بدنه جدا شود).
+                    span.Borders = span.Borders ?? new BorderDetail();
+                    if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "firstRowOuter";
+                    span.WidthMode = "equal";
                     break;
 
                 default:
-                    // 🐞 رفع باگِ «اسکرولِ افقیِ بیش‌ازحد فراگیر»: قبلاً همینجا
-                    // هر جدولِ ناشناخته‌ای هم horizontalScroll می‌گرفت (به‌عنوانِ
-                    // «امن‌ترین پیش‌فرض»)، که باعث می‌شد خیلی بیشتر از نیاز
-                    // (هر جدولِ ساده‌ی بدونِ استایلِ خاص) این رفتار را بگیرد.
-                    // طبقِ خواسته‌ی صریحِ کاربر، اسکرولِ افقی حالا فقط باید
-                    // برای استایل‌های صراحتاً شناخته‌شده (بالا) اعمال شود؛
-                    // برای هر جدولِ دیگری ResponsiveStrategy خالی (null)
-                    // می‌ماند و رفتارِ عادیِ فشرده‌شدن در عرضِ صفحه ادامه پیدا
-                    // می‌کند.
+                    // 🐞 رفع باگِ «اسکرولِ افقیِ بیش‌ازحد فراگیر»: هر جدولِ
+                    // ناشناخته‌ای بدونِ ResponsiveStrategy/BorderMode/WidthMode
+                    // می‌ماند — فلاتر برایِ این‌ها به رفتارِ قدیمیِ مبتنی‌بر دادهٔ
+                    // خامِ per-cell/نامِ استایل رجوع می‌کند.
                     break;
             }
         }
