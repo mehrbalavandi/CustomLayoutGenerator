@@ -1024,15 +1024,32 @@ namespace CustomLayoutGenerator
                 foreach (var cell in cells)
                 {
                     var tcPr = cell.Elements<TableCellProperties>().FirstOrDefault();
+                    // اولویت اول: عرض صریح خود سلول در این ردیف
+                    var tcw = tcPr?.TableCellWidth;
+                    // 🐞 پیدا شد با بررسیِ خودِ فایلِ Word: یک سلول با
+                    // w:tcW w:w="0" w:type="auto" یعنی «هیچ عرضِ صریحی
+                    // تعیین نشده، Word خودش بر اساسِ محتوا اندازه می‌گیرد»
+                    // — نه «عرضش صفر است». قبلاً کد فقط Width.Value را
+                    // می‌خواند، بدونِ چک‌کردنِ Type، پس این "0" را به‌عنوانِ
+                    // یک عرضِ واقعی (صفر) قبول می‌کرد و همین باعثِ رفتارِ
+                    // غیرقابلِ‌پیش‌بینی در محاسبه‌ی TableWidthPercent برایِ
+                    // چنین سلول‌هایی می‌شد. حالا فقط وقتی Type صراحتاً
+                    // Dxa است (یا اصلاً ست نشده، که طبقِ استانداردِ OOXML
+                    // پیش‌فرضش Dxa است) به این عدد اعتماد می‌کنیم.
                     double cellWidth = 0;
+                    double wVal = 0;
+                    bool cellHasExplicitDxaWidth =
+                        tcw != null &&
+                        tcw.Width != null &&
+                        (tcw.Type == null || tcw.Type.Value == TableWidthUnitValues.Dxa) &&
+                        double.TryParse(tcw.Width.Value, out wVal) &&
+                        wVal > 0;
 
                     int colSpan = 1;
                     if (tcPr?.GridSpan != null && tcPr.GridSpan.Val != null)
                         colSpan = tcPr.GridSpan.Val.Value;
 
-                    // اولویت اول: عرض صریح خود سلول در این ردیف
-                    var tcw = tcPr?.TableCellWidth;
-                    if (tcw != null && tcw.Width != null && double.TryParse(tcw.Width.Value, out double wVal))
+                    if (cellHasExplicitDxaWidth)
                     {
                         cellWidth = wVal;
                     }
@@ -1061,8 +1078,19 @@ namespace CustomLayoutGenerator
                     if (rowData.IsHeader) cellData.IsHeaderCell = true;
 
                     // 🌟 اعمال پهنای اختصاصی محاسبه شده برای همین ردیف
+                    // 🐞 قبلاً این‌جا صرفاً «سهمِ این سلول از کلِ همین ردیف»
+                    // محاسبه می‌شد (یعنی برای جدولِ تک‌سلولی، همیشه دقیقاً
+                    // ۱۰۰٪ می‌شد — چون یک سلول ۱۰۰٪ از خودش است — کاملاً
+                    // مستقل از این‌که آن سلول واقعاً چقدر از عرضِ صفحه را
+                    // اشغال می‌کند؛ مثلاً CompactTableِ «۰۱» با عرضِ واقعیِ
+                    // ۴۹۱dxa، که فقط ~۵٪ از صفحه است). حالا در سهمِ واقعیِ
+                    // کلِ جدول از صفحه (TableWidthPercent، که بالاتر از
+                    // رویِ tblW/tblGrid محاسبه شده) هم ضرب می‌شود، تا عددِ
+                    // نهایی نسبت‌به‌صفحه معنا داشته باشد، نه فقط نسبت‌به‌ردیف.
                     if (rowTotalWidth > 0 && i < rowCellWidths.Count)
-                        cellData.WidthPercent = Math.Round((rowCellWidths[i] / rowTotalWidth) * 100, 2);
+                        cellData.WidthPercent = Math.Round(
+                            (rowCellWidths[i] / rowTotalWidth) * (tableSpan.TableWidthPercent ?? 100),
+                            2);
 
                     var cellProps = ExtractCellProperties(cell);
                     if (cellProps.ContainsKey("shading")) cellData.FillColor = cellProps["shading"];
@@ -1693,7 +1721,12 @@ namespace CustomLayoutGenerator
             }
 
             if (totalWidthPercent > 100) totalWidthPercent = 100;
-            if (totalWidthPercent < 10) totalWidthPercent = 10;
+            // 🐞 قبلاً حداقلِ ۱۰٪ به‌زور اعمال می‌شد — برای جدولِ واقعاً کوچکی
+            // مثلِ جعبه‌ی شماره‌ی تمرین (که طبقِ tblGrid واقعی فقط ~۵٪ از
+            // صفحه است)، این یعنی عددِ نادرست/بزرگ‌تر از واقعیت گزارش
+            // می‌شد. فقط در برابرِ صفر/منفیِ واقعی (داده‌ی خراب) محافظت
+            // می‌کنیم، نه هر جدولِ کوچکِ معتبر.
+            if (totalWidthPercent <= 0) totalWidthPercent = 1;
             props.Add("tableWidthPercent", totalWidthPercent.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
             TableBorders inlineBorders = tblPr.TableBorders;
