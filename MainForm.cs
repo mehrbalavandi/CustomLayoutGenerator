@@ -1123,11 +1123,46 @@ namespace CustomLayoutGenerator
                         }
                         else if (element is Table nestedTable)
                         {
-                            // 🌟 استخراج بازگشتی جدول‌های تودرتو
                             var nestedTableSpan = ParseTable(nestedTable, mainPart, resolver, outputDir);
-                            var nestedPara = new ParagraphData();
-                            nestedPara.Spans.Add(nestedTableSpan);
-                            cellData.Paragraphs.Add(nestedPara);
+
+                            // 🐞 پیشنهادِ کاربر: CompactTable (نشان‌های تک‌سلولی
+                            // مثلِ شماره‌ی تمرین) اصلاً به‌عنوانِ یک span از نوعِ
+                            // "table" استخراج نشود — چون قرارگرفتنش داخلِ یک
+                            // سلولِ جدولِ دیگر، آن را واردِ محدودیتِ عرضِ سختِ
+                            // ویجتِ Table در فلاتر می‌کرد (چند دور تلاشِ ناموفق
+                            // برایِ دورزدنِ همین محدودیت). به‌جایش، دقیقاً مثلِ
+                            // یک متنِ ساده که مستقیم بوردر/رنگ می‌گیرد (همان‌طور
+                            // که تمرینِ «۰۲» — که هیچ‌وقت مشکلی نداشت — از قبل
+                            // این‌طور رفتار می‌کند) استخراج می‌شود: محتوایِ همان
+                            // یک سلول مستقیم به پاراگرافِ والد اضافه می‌شود، با
+                            // Bordersِ جدول و FillColorِ سلول کپی‌شده رویِ تک‌تکِ
+                            // اسپن‌های متنی‌اش.
+                            var compactStyleKey = nestedTableSpan.TableStyleName ?? nestedTableSpan.TableStyleId ?? "";
+                            var compactCell = nestedTableSpan.TableRows.Count > 0 && nestedTableSpan.TableRows[0].Cells.Count > 0
+                                ? nestedTableSpan.TableRows[0].Cells[0]
+                                : null;
+
+                            if (compactStyleKey == "CompactTable" && compactCell != null)
+                            {
+                                foreach (var innerPara in compactCell.Paragraphs)
+                                {
+                                    foreach (var innerSpan in innerPara.Spans)
+                                    {
+                                        if (innerSpan.Type != "text") continue;
+                                        innerSpan.HasBorders = "true";
+                                        innerSpan.Borders = nestedTableSpan.Borders;
+                                        innerSpan.FillColor = compactCell.FillColor;
+                                    }
+                                    cellData.Paragraphs.Add(innerPara);
+                                }
+                            }
+                            else
+                            {
+                                // 🌟 استخراج بازگشتی جدول‌های تودرتو (رفتارِ قبلی، برایِ همه‌ی استایل‌هایِ دیگر بدونِ تغییر)
+                                var nestedPara = new ParagraphData();
+                                nestedPara.Spans.Add(nestedTableSpan);
+                                cellData.Paragraphs.Add(nestedPara);
+                            }
                         }
                     }
 
