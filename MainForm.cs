@@ -1379,7 +1379,12 @@ namespace CustomLayoutGenerator
 
         private bool IsBold(RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart)
         {
+            // 🐞 این فیکس در یک نوبتِ قبلی نوشته شده بود ولی معلوم شد هیچ‌وقت
+            // واقعاً در مخزن ذخیره نشده بود (برخلافِ خواهرش، فیکسِ Italic،
+            // که درست ذخیره شده بود) — دقیقاً همین غیبت، علتِ اصلیِ ادامه‌ی
+            // «مارکرِ b اضافه نمی‌شود» بود، نه اشتباه‌بودنِ خودِ منطق.
             if (rPr?.Bold != null) return rPr.Bold.Val == null || rPr.Bold.Val.Value;
+            if (rPr?.BoldComplexScript != null) return rPr.BoldComplexScript.Val == null || rPr.BoldComplexScript.Val.Value;
             if (mainPart?.StyleDefinitionsPart?.Styles == null) return false;
             if (!string.IsNullOrEmpty(runStyleId))
             {
@@ -1387,6 +1392,7 @@ namespace CustomLayoutGenerator
                 while (style != null)
                 {
                     if (style.StyleRunProperties?.Bold != null) return style.StyleRunProperties.Bold.Val == null || style.StyleRunProperties.Bold.Val.Value;
+                    if (style.StyleRunProperties?.BoldComplexScript != null) return style.StyleRunProperties.BoldComplexScript.Val == null || style.StyleRunProperties.BoldComplexScript.Val.Value;
                     var basedOn = style.BasedOn?.Val?.Value;
                     if (string.IsNullOrEmpty(basedOn)) break;
                     style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1398,6 +1404,7 @@ namespace CustomLayoutGenerator
                 while (style != null)
                 {
                     if (style.StyleRunProperties?.Bold != null) return style.StyleRunProperties.Bold.Val == null || style.StyleRunProperties.Bold.Val.Value;
+                    if (style.StyleRunProperties?.BoldComplexScript != null) return style.StyleRunProperties.BoldComplexScript.Val == null || style.StyleRunProperties.BoldComplexScript.Val.Value;
                     var basedOn = style.BasedOn?.Val?.Value;
                     if (string.IsNullOrEmpty(basedOn)) break;
                     style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1480,6 +1487,8 @@ namespace CustomLayoutGenerator
             {
                 var fontSize = style.StyleRunProperties?.FontSize?.Val?.Value;
                 if (!string.IsNullOrEmpty(fontSize)) return fontSize;
+                var fontSizeCs = style.StyleRunProperties?.FontSizeComplexScript?.Val?.Value;
+                if (!string.IsNullOrEmpty(fontSizeCs)) return fontSizeCs;
                 var basedOn = style.BasedOn?.Val?.Value;
                 if (string.IsNullOrEmpty(basedOn)) break;
                 style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1579,6 +1588,10 @@ namespace CustomLayoutGenerator
 
             string fontSizeStr = null;
             if (rPr?.FontSize?.Val?.Value != null) fontSizeStr = rPr.FontSize.Val.Value;
+            // 🐞 همان فیکسی که برایِ IsBold دوباره اعمال شد — این هم در همان
+            // نوبتِ گم‌شده نوشته شده بود ولی هیچ‌وقت واقعاً ذخیره نشد.
+            if (string.IsNullOrEmpty(fontSizeStr) && rPr?.FontSizeComplexScript?.Val?.Value != null)
+                fontSizeStr = rPr.FontSizeComplexScript.Val.Value;
             if (string.IsNullOrEmpty(fontSizeStr))
             {
                 if (!string.IsNullOrEmpty(runStyleId)) fontSizeStr = GetFontSizeFromStyleId(mainPart, runStyleId);
@@ -1587,6 +1600,11 @@ namespace CustomLayoutGenerator
                 {
                     var pSize = pPr.ParagraphMarkRunProperties.GetFirstChild<FontSize>();
                     if (pSize?.Val?.Value != null) fontSizeStr = pSize.Val.Value;
+                    if (string.IsNullOrEmpty(fontSizeStr))
+                    {
+                        var pSizeCs = pPr.ParagraphMarkRunProperties.GetFirstChild<FontSizeComplexScript>();
+                        if (pSizeCs?.Val?.Value != null) fontSizeStr = pSizeCs.Val.Value;
+                    }
                 }
             }
 
