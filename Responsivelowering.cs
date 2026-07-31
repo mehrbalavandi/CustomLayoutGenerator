@@ -61,7 +61,12 @@ namespace CustomLayoutGenerator
                     span.ResponsiveStrategy = "collapseToCards";
                     span.Borders = span.Borders ?? new BorderDetail();
                     span.Borders.Val = "dotted";
-                    span.BorderMode = "all";
+                    // 🐞 عمداً "none": ظاهرِ نقطه‌چین/کارتی فقط برایِ حالتِ
+                    // موبایلِ collapseToCards استفاده می‌شود، نه یک خطِ
+                    // واقعیِ رسم‌شده در نمایِ گریدِ عادی — قبلاً اشتباهاً
+                    // "all" بود که باعث می‌شد همه‌ی DottedTableها بوردر
+                    // نشان بدهند، درحالی‌که قبلاً هیچ‌وقت نشان نمی‌دادند.
+                    span.BorderMode = "none";
                     span.WidthMode = "equal";
                     break;
 
