@@ -1408,7 +1408,10 @@ namespace CustomLayoutGenerator
 
         private bool IsItalic(RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart)
         {
+            // 🐞 همان شکافِ IsBold/sz: اینجا هم بود — فقط <w:i/> چک می‌شد، نه
+            // <w:iCs/> (نسخه‌ی Complex Script).
             if (rPr?.Italic != null) return rPr.Italic.Val == null || rPr.Italic.Val.Value;
+            if (rPr?.ItalicComplexScript != null) return rPr.ItalicComplexScript.Val == null || rPr.ItalicComplexScript.Val.Value;
             if (mainPart?.StyleDefinitionsPart?.Styles == null) return false;
             if (!string.IsNullOrEmpty(runStyleId))
             {
@@ -1416,6 +1419,7 @@ namespace CustomLayoutGenerator
                 while (style != null)
                 {
                     if (style.StyleRunProperties?.Italic != null) return style.StyleRunProperties.Italic.Val == null || style.StyleRunProperties.Italic.Val.Value;
+                    if (style.StyleRunProperties?.ItalicComplexScript != null) return style.StyleRunProperties.ItalicComplexScript.Val == null || style.StyleRunProperties.ItalicComplexScript.Val.Value;
                     var basedOn = style.BasedOn?.Val?.Value;
                     if (string.IsNullOrEmpty(basedOn)) break;
                     style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1427,6 +1431,7 @@ namespace CustomLayoutGenerator
                 while (style != null)
                 {
                     if (style.StyleRunProperties?.Italic != null) return style.StyleRunProperties.Italic.Val == null || style.StyleRunProperties.Italic.Val.Value;
+                    if (style.StyleRunProperties?.ItalicComplexScript != null) return style.StyleRunProperties.ItalicComplexScript.Val == null || style.StyleRunProperties.ItalicComplexScript.Val.Value;
                     var basedOn = style.BasedOn?.Val?.Value;
                     if (string.IsNullOrEmpty(basedOn)) break;
                     style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1888,53 +1893,6 @@ namespace CustomLayoutGenerator
             cellData.PaddingRight = GetMargin(
                 tcMargin?.GetFirstChild<EndMargin>(),
                 tblMargin?.GetFirstChild<EndMargin>());
-        }
-        private List<string> ExtractCellBorders(TableCell cell)
-        {
-            var borders = new List<string>();
-            var tcPr = cell.Elements<TableCellProperties>().FirstOrDefault();
-
-            if (tcPr != null)
-            {
-                var tcBorders = tcPr.Elements<TableCellBorders>().FirstOrDefault();
-                // ۱. بررسی مرزهای اختصاصی خود سلول
-                if (tcBorders != null)
-                {
-                    if (tcBorders.TopBorder != null && tcBorders.TopBorder.Val != BorderValues.None) borders.Add("top");
-                    if (tcBorders.BottomBorder != null && tcBorders.BottomBorder.Val != BorderValues.None) borders.Add("bottom");
-                    if (tcBorders.LeftBorder != null && tcBorders.LeftBorder.Val != BorderValues.None) borders.Add("left");
-                    if (tcBorders.RightBorder != null && tcBorders.RightBorder.Val != BorderValues.None) borders.Add("right");
-
-                    return borders; // اگر سلول مرز اختصاصی داشت، همین را برمی‌گردانیم
-                }
-            }
-
-            // ۲. فالبک (Fallback): اگر سلول مرز اختصاصی نداشت، بررسی مرزهای کل جدول
-            var table = cell.Ancestors<Table>().FirstOrDefault();
-            var tblPr = table?.Elements<TableProperties>().FirstOrDefault();
-            var tblBorders = tblPr?.Elements<TableBorders>().FirstOrDefault();
-
-            if (tblBorders != null)
-            {
-                if (tblBorders.TopBorder != null && tblBorders.TopBorder.Val != BorderValues.None) borders.Add("top");
-                if (tblBorders.BottomBorder != null && tblBorders.BottomBorder.Val != BorderValues.None) borders.Add("bottom");
-                if (tblBorders.LeftBorder != null && tblBorders.LeftBorder.Val != BorderValues.None) borders.Add("left");
-                if (tblBorders.RightBorder != null && tblBorders.RightBorder.Val != BorderValues.None) borders.Add("right");
-
-                // مرزهای داخلی جدول (اگر جدول خطوط شطرنجی داخلی داشته باشد)
-                if (tblBorders.InsideHorizontalBorder != null && tblBorders.InsideHorizontalBorder.Val != BorderValues.None)
-                {
-                    borders.Add("top");
-                    borders.Add("bottom");
-                }
-                if (tblBorders.InsideVerticalBorder != null && tblBorders.InsideVerticalBorder.Val != BorderValues.None)
-                {
-                    borders.Add("left");
-                    borders.Add("right");
-                }
-            }
-
-            return borders.Distinct().ToList(); // حذف جهت‌های تکراری احتمالی
         }
     }
 
