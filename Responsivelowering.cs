@@ -49,6 +49,26 @@ namespace CustomLayoutGenerator
             var styleKey = span.TableStyleName ?? span.TableStyleId ?? "";
             switch (styleKey)
             {
+                case "MultiColumnTable":
+                    // 🌟 متنِ چندستونی: در صفحهٔ عریض همهٔ ستون‌ها کنارِ هم و
+                    // داخلِ یک جدول‌اند که فقط بوردرِ بیرونی‌اش دیده می‌شود
+                    // (BorderMode="outer" — خطوطِ داخلیِ بینِ ستون‌ها رسم
+                    // نمی‌شود)؛ در صفحهٔ باریک، همان استراتژیِ "stack" فعال
+                    // می‌شود و هر ستون به یک جدولِ تک‌ستونهٔ بوردردارِ مستقل
+                    // تبدیل می‌گردد. یعنی ترکیبی از رفتارِ OutsideTable
+                    // (عریض) و ColumnStackTable (باریک) — بدونِ نیاز به
+                    // مکانیزمِ تازه، فقط با کنارِ هم گذاشتنِ همان دو پرچمِ
+                    // موجود.
+                    span.ResponsiveStrategy = "stack";
+                    span.Type = "layout";
+                    span.LayoutDirection = "row";
+                    span.LayoutReflow = "stack";
+                    span.Borders = span.Borders ?? new BorderDetail();
+                    if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "outer";
+                    span.WidthMode = "equal";
+                    break;
+
                 case "ColumnStackTable":
                     // جدولِ چیدمانی → نودِ layoutِ ستون‌محور که در صفحهٔ کوچک عمودی می‌شود
                     span.ResponsiveStrategy = "stack";
