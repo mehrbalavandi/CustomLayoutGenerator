@@ -1377,14 +1377,31 @@ namespace CustomLayoutGenerator
             return false;
         }
 
-        private bool IsBold(RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart)
+        /// 🐞 آیا برای این ران باید به نسخهٔ Complex Script (bCs/iCs/szCs)
+        /// اعتماد کرد؟ Word در سندهای دوزبانه تقریباً همیشه کنارِ هر ران
+        /// نشانه‌های CS را هم می‌گذارد (مثلاً <w:iCs/>) حتی وقتی متنِ لاتینِ
+        /// آن اصلاً ایتالیک نیست — این نشانه فقط به بخشِ complex-script
+        /// (عربی/فارسی/عبری) مربوط است. پس اگر ران متنِ لاتین دارد، نسخهٔ CS
+        /// نباید اعمال شود؛ فقط وقتی متن هیچ حرفِ لاتینی ندارد (متنِ
+        /// عربی/فارسی، یا صرفاً رقم/نماد مثلِ «۰۱») CS معیارِ درست است.
+        private static bool PrefersComplexScript(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return true;
+            foreach (var ch in text)
+            {
+                if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) return false;
+            }
+            return true;
+        }
+
+        private bool IsBold(RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart, bool preferCs)
         {
             // 🐞 این فیکس در یک نوبتِ قبلی نوشته شده بود ولی معلوم شد هیچ‌وقت
             // واقعاً در مخزن ذخیره نشده بود (برخلافِ خواهرش، فیکسِ Italic،
             // که درست ذخیره شده بود) — دقیقاً همین غیبت، علتِ اصلیِ ادامه‌ی
             // «مارکرِ b اضافه نمی‌شود» بود، نه اشتباه‌بودنِ خودِ منطق.
             if (rPr?.Bold != null) return rPr.Bold.Val == null || rPr.Bold.Val.Value;
-            if (rPr?.BoldComplexScript != null) return rPr.BoldComplexScript.Val == null || rPr.BoldComplexScript.Val.Value;
+            if (preferCs && rPr?.BoldComplexScript != null) return rPr.BoldComplexScript.Val == null || rPr.BoldComplexScript.Val.Value;
             if (mainPart?.StyleDefinitionsPart?.Styles == null) return false;
             if (!string.IsNullOrEmpty(runStyleId))
             {
@@ -1392,7 +1409,7 @@ namespace CustomLayoutGenerator
                 while (style != null)
                 {
                     if (style.StyleRunProperties?.Bold != null) return style.StyleRunProperties.Bold.Val == null || style.StyleRunProperties.Bold.Val.Value;
-                    if (style.StyleRunProperties?.BoldComplexScript != null) return style.StyleRunProperties.BoldComplexScript.Val == null || style.StyleRunProperties.BoldComplexScript.Val.Value;
+                    if (preferCs && style.StyleRunProperties?.BoldComplexScript != null) return style.StyleRunProperties.BoldComplexScript.Val == null || style.StyleRunProperties.BoldComplexScript.Val.Value;
                     var basedOn = style.BasedOn?.Val?.Value;
                     if (string.IsNullOrEmpty(basedOn)) break;
                     style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1404,7 +1421,7 @@ namespace CustomLayoutGenerator
                 while (style != null)
                 {
                     if (style.StyleRunProperties?.Bold != null) return style.StyleRunProperties.Bold.Val == null || style.StyleRunProperties.Bold.Val.Value;
-                    if (style.StyleRunProperties?.BoldComplexScript != null) return style.StyleRunProperties.BoldComplexScript.Val == null || style.StyleRunProperties.BoldComplexScript.Val.Value;
+                    if (preferCs && style.StyleRunProperties?.BoldComplexScript != null) return style.StyleRunProperties.BoldComplexScript.Val == null || style.StyleRunProperties.BoldComplexScript.Val.Value;
                     var basedOn = style.BasedOn?.Val?.Value;
                     if (string.IsNullOrEmpty(basedOn)) break;
                     style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1413,12 +1430,12 @@ namespace CustomLayoutGenerator
             return false;
         }
 
-        private bool IsItalic(RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart)
+        private bool IsItalic(RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart, bool preferCs)
         {
             // 🐞 همان شکافِ IsBold/sz: اینجا هم بود — فقط <w:i/> چک می‌شد، نه
             // <w:iCs/> (نسخه‌ی Complex Script).
             if (rPr?.Italic != null) return rPr.Italic.Val == null || rPr.Italic.Val.Value;
-            if (rPr?.ItalicComplexScript != null) return rPr.ItalicComplexScript.Val == null || rPr.ItalicComplexScript.Val.Value;
+            if (preferCs && rPr?.ItalicComplexScript != null) return rPr.ItalicComplexScript.Val == null || rPr.ItalicComplexScript.Val.Value;
             if (mainPart?.StyleDefinitionsPart?.Styles == null) return false;
             if (!string.IsNullOrEmpty(runStyleId))
             {
@@ -1426,7 +1443,7 @@ namespace CustomLayoutGenerator
                 while (style != null)
                 {
                     if (style.StyleRunProperties?.Italic != null) return style.StyleRunProperties.Italic.Val == null || style.StyleRunProperties.Italic.Val.Value;
-                    if (style.StyleRunProperties?.ItalicComplexScript != null) return style.StyleRunProperties.ItalicComplexScript.Val == null || style.StyleRunProperties.ItalicComplexScript.Val.Value;
+                    if (preferCs && style.StyleRunProperties?.ItalicComplexScript != null) return style.StyleRunProperties.ItalicComplexScript.Val == null || style.StyleRunProperties.ItalicComplexScript.Val.Value;
                     var basedOn = style.BasedOn?.Val?.Value;
                     if (string.IsNullOrEmpty(basedOn)) break;
                     style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1438,7 +1455,7 @@ namespace CustomLayoutGenerator
                 while (style != null)
                 {
                     if (style.StyleRunProperties?.Italic != null) return style.StyleRunProperties.Italic.Val == null || style.StyleRunProperties.Italic.Val.Value;
-                    if (style.StyleRunProperties?.ItalicComplexScript != null) return style.StyleRunProperties.ItalicComplexScript.Val == null || style.StyleRunProperties.ItalicComplexScript.Val.Value;
+                    if (preferCs && style.StyleRunProperties?.ItalicComplexScript != null) return style.StyleRunProperties.ItalicComplexScript.Val == null || style.StyleRunProperties.ItalicComplexScript.Val.Value;
                     var basedOn = style.BasedOn?.Val?.Value;
                     if (string.IsNullOrEmpty(basedOn)) break;
                     style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
@@ -1543,8 +1560,12 @@ namespace CustomLayoutGenerator
             var runStyleId = rPr?.RunStyle?.Val?.Value;
             var pStyleId = pPr?.ParagraphStyleId?.Val?.Value;
 
-            if (IsBold(rPr, runStyleId, pStyleId, mainPart)) markers.Add("b");
-            if (IsItalic(rPr, runStyleId, pStyleId, mainPart)) markers.Add("i");
+            // 🐞 نشانه‌های Complex Script فقط وقتی معیارند که متنِ خودِ ران
+            // لاتین نباشد (ببینید توضیحِ PrefersComplexScript).
+            bool preferCs = PrefersComplexScript(run.InnerText);
+
+            if (IsBold(rPr, runStyleId, pStyleId, mainPart, preferCs)) markers.Add("b");
+            if (IsItalic(rPr, runStyleId, pStyleId, mainPart, preferCs)) markers.Add("i");
 
             if (rPr?.Underline != null)
             {
