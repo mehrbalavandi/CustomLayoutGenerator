@@ -1560,9 +1560,18 @@ namespace CustomLayoutGenerator
             var runStyleId = rPr?.RunStyle?.Val?.Value;
             var pStyleId = pPr?.ParagraphStyleId?.Val?.Value;
 
-            // 🐞 نشانه‌های Complex Script فقط وقتی معیارند که متنِ خودِ ران
-            // لاتین نباشد (ببینید توضیحِ PrefersComplexScript).
-            bool preferCs = PrefersComplexScript(run.InnerText);
+            // 🐞 پیدا شد با بررسیِ خودِ سند: رانِ اعداد «۱» تا «۱۰» در فرمِ
+            // Booking هم <w:b/> واقعی دارند هم <w:iCs/> بدونِ <w:i/> — قبلاً
+            // چون این اعداد حرفِ لاتین ندارند، preferCs=true می‌شد و همان
+            // ایتالیکِ جعلیِ CS رویشان اعمال می‌شد (دقیقاً همان مشکلِ صفحه‌ی
+            // ۲۱، ولی این‌بار حتی معیارِ «بدونِ حرفِ لاتین» هم گولش می‌زد).
+            // معیارِ درست‌تر: فقط وقتی به CS اعتماد کن که ران **هیچ‌کدام** از
+            // پرچم‌های مستقیمِ لاتین (نه بولد نه ایتالیک) را نداشته باشد —
+            // چون همین که یکی از آن‌ها ست شده، یعنی Word دارد فرمت‌بندیِ
+            // لاتین را برایِ همین ران واقعاً دنبال می‌کند، پس نبودِ دیگری
+            // (مثلاً ایتالیک) عمدی است، نه یک خلأ که باید از CS پر شود.
+            bool hasAnyDirectLatinStyle = rPr?.Bold != null || rPr?.Italic != null;
+            bool preferCs = !hasAnyDirectLatinStyle && PrefersComplexScript(run.InnerText);
 
             if (IsBold(rPr, runStyleId, pStyleId, mainPart, preferCs)) markers.Add("b");
             if (IsItalic(rPr, runStyleId, pStyleId, mainPart, preferCs)) markers.Add("i");
@@ -1606,6 +1615,25 @@ namespace CustomLayoutGenerator
 
             if (string.IsNullOrEmpty(fontName)) fontName = "Source Sans 3";
             markers.Add($"fn:{fontName}");
+
+            // 🐞 پیدا شد با بررسیِ خودِ سند: «Booking Form» هیچ‌وقت <w:b/>
+            // ندارد — ضخامتِ بصری‌اش کاملاً از رویِ نامِ خودِ خانواده‌فونت
+            // می‌آید («Source Sans 3 SemiBold» به‌جایِ خانواده‌ی معمولی +
+            // پرچمِ بولد؛ الگویِ رایج در فونت‌هایِ چندوزنه). نه IsBold نه
+            // هیچ فال‌بکِ CS نمی‌تواند این را بگیرد، چون اصلاً هیچ ویژگیِ
+            // بولدی برایِ پیداکردن وجود ندارد. این‌جا مستقیم از رویِ خودِ
+            // نامِ فونتِ نهایی تشخیص می‌دهیم.
+            if (!markers.Contains("b"))
+            {
+                string fnLower = fontName.ToLowerInvariant();
+                if (fnLower.Contains("semibold") || fnLower.Contains("semi-bold") ||
+                    fnLower.Contains("extrabold") || fnLower.Contains("extra bold") ||
+                    fnLower.Contains("heavy") || fnLower.Contains("black") ||
+                    (fnLower.Contains("bold") && !fnLower.Contains("semibold")))
+                {
+                    markers.Add("b");
+                }
+            }
 
             string fontSizeStr = null;
             if (rPr?.FontSize?.Val?.Value != null) fontSizeStr = rPr.FontSize.Val.Value;
