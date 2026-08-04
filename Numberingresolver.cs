@@ -133,6 +133,24 @@ namespace CustomLayoutGenerator
             return (left, hanging);
         }
 
+        /// <summary>
+        /// آیا شماره‌ی خودکارِ این سطحِ لیست در تعریفِ numbering بولد است؟
+        /// Word فرمتِ ظاهریِ شماره (۱، ۲، …) را از rPr داخلِ خودِ &lt;w:lvl&gt;
+        /// می‌گیرد، نه از متنِ پاراگراف — پس منبعِ درستِ «بولد بودنِ شماره»
+        /// همین‌جاست، نه رانِ متن. (اگر پاراگراف خودش شماره را override کند
+        /// موضوعِ دیگری است؛ در این کتاب‌ها شماره‌ها از سطحِ numbering می‌آیند.)
+        /// </summary>
+        public bool LevelBold(int numId, int level)
+        {
+            if (!_absByNum.TryGetValue(numId, out var abs)) return false;
+            var lvlDef = LevelOf(abs, level);
+            var rpr = lvlDef?.NumberingSymbolRunProperties;
+            if (rpr == null) return false;
+            var b = rpr.GetFirstChild<Bold>();
+            if (b == null) return false;
+            return b.Val == null || b.Val.Value;
+        }
+
         private static Level LevelOf(AbstractNum abs, int level) =>
             abs.Elements<Level>().FirstOrDefault(l => l.LevelIndex?.Value == level);
 

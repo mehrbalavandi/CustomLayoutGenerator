@@ -37,6 +37,9 @@ namespace CustomLayoutGenerator
         private List<SpanData> _pendingAudioSpans = new List<SpanData>();
         private int? _pendingAudioSpanStartMs = null;
         private HashSet<ParagraphData> _blankWord2Set = new HashSet<ParagraphData>();
+        // 🐞 BlankWord3: مثلِ BlankWord2 متنِ پاراگراف را مخفی می‌کند، ولی
+        // ادغام/collapse نمی‌شود و شماره‌ی لیست بیرونِ {blk} (دیده‌شدنی) می‌ماند.
+        private HashSet<ParagraphData> _blankWord3Set = new HashSet<ParagraphData>();
 
         public void ResetCounters()
         {
@@ -48,6 +51,7 @@ namespace CustomLayoutGenerator
             _pendingAudioSpans = new List<SpanData>();
             _pendingAudioSpanStartMs = null;
             _blankWord2Set.Clear();
+            _blankWord3Set.Clear();
         }
 
         private void btnSelectFile_Click(object sender, EventArgs e)
@@ -82,6 +86,7 @@ namespace CustomLayoutGenerator
                         foreach (var page in pages)
                         {
                             page.Paragraphs = MergeBlankWord2Paragraphs(page.Paragraphs);
+                            page.Paragraphs = WrapBlankWord3Paragraphs(page.Paragraphs);
                         }
 
                         List<AudioScriptTrack> audioScripts = new List<AudioScriptTrack>();
@@ -107,6 +112,7 @@ namespace CustomLayoutGenerator
                                     foreach (var track in audioScripts)
                                     {
                                         track.Paragraphs = MergeBlankWord2Paragraphs(track.Paragraphs);
+                                        track.Paragraphs = WrapBlankWord3Paragraphs(track.Paragraphs);
                                     }
                                 }
                             }
@@ -158,6 +164,7 @@ namespace CustomLayoutGenerator
                     if (element is Paragraph paragraph)
                     {
                         bool isBlankWord2 = IsTargetStyle(paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value, wordDoc.MainDocumentPart, "BlankWord2");
+                        bool isBlankWord3 = IsTargetStyle(paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value, wordDoc.MainDocumentPart, "BlankWord3");
 
                         var paraDataList = ParseParagraph(paragraph, wordDoc.MainDocumentPart, resolver, outputDir, false);
 
@@ -173,6 +180,10 @@ namespace CustomLayoutGenerator
                             if (isBlankWord2)
                             {
                                 foreach (var p in paraDataList) _blankWord2Set.Add(p);
+                            }
+                            if (isBlankWord3)
+                            {
+                                foreach (var p in paraDataList) _blankWord3Set.Add(p);
                             }
                         }
                     }
@@ -236,6 +247,7 @@ namespace CustomLayoutGenerator
                         foreach (var p in cell.Elements<Paragraph>())
                         {
                             bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
+                            bool isBlankWord3 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord3");
                             var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, inTable: true, audioMarkersAsSpans: true);
 
                             // 🌟 فیلتر پاراگراف‌های زباله و نامرئی (چون در این
@@ -250,6 +262,10 @@ namespace CustomLayoutGenerator
                                 if (isBlankWord2)
                                 {
                                     foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
+                                }
+                                if (isBlankWord3)
+                                {
+                                    foreach (var cp in parsedParas) _blankWord3Set.Add(cp);
                                 }
                             }
                         }
@@ -275,6 +291,7 @@ namespace CustomLayoutGenerator
                 foreach (var p in body.Elements<Paragraph>())
                 {
                     bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
+                    bool isBlankWord3 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord3");
                     var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, inTable: false, audioMarkersAsSpans: false);
 
                     parsedParas.RemoveAll(pr =>
@@ -287,6 +304,10 @@ namespace CustomLayoutGenerator
                         if (isBlankWord2)
                         {
                             foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
+                        }
+                        if (isBlankWord3)
+                        {
+                            foreach (var cp in parsedParas) _blankWord3Set.Add(cp);
                         }
                     }
                 }
@@ -393,7 +414,11 @@ namespace CustomLayoutGenerator
                         // همین یک فاصله‌ی کم، خط‌های ۲ به بعد را کمی جلوتر
                         // (تورفتگیِ کمتر) از خطِ اول نشان می‌داد. با یکسان‌کردنِ
                         // فاصله‌ها، همه‌ی خط‌ها هم‌تراز می‌شوند.
-                        var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + "  ", Markers = new List<string> { "b" } };
+                        // 🐞 به‌جای هاردکدِ "b"، بولد بودنِ واقعیِ شماره (از سطحِ
+                        // numbering) رعایت می‌شود — هم‌راستا با فیکسِ ListMarkerBold.
+                        var markerMarkers = new List<string>();
+                        if (p.ListMarkerBold == true) markerMarkers.Add("b");
+                        var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + "  ", Markers = markerMarkers };
                         blankParentSpan.InnerSpans.Add(markerSpan);
                         combinedRawText += p.ListMarker + "  ";
                     }
@@ -468,6 +493,89 @@ namespace CustomLayoutGenerator
             return result;
         }
 
+        // ==========================================
+        // BlankWord3: مثلِ BlankWord2 متنِ خط را مخفی می‌کند، ولی
+        //   (۱) هیچ ادغام/collapseی بین خط‌ها انجام نمی‌دهد (هر خط مستقل)،
+        //   (۲) شماره‌ی لیست را بیرونِ {blk} نگه می‌دارد تا دیده شود و فقط
+        //       متنِ بعد از شماره مخفی شود.
+        // این تابع بعد از MergeBlankWord2Paragraphs صدا زده می‌شود؛ چون
+        // پاراگراف‌های BlankWord3 در _blankWord2Set نیستند، merge دست‌شان
+        // نمی‌زند و این‌جا به‌صورتِ تکی wrap می‌شوند.
+        // ==========================================
+        private List<ParagraphData> WrapBlankWord3Paragraphs(List<ParagraphData> input)
+        {
+            if (_blankWord3Set.Count == 0) return input;
+
+            var result = new List<ParagraphData>();
+            foreach (var p in input)
+            {
+                if (!_blankWord3Set.Contains(p))
+                {
+                    result.Add(p);
+                    continue;
+                }
+
+                var wrapped = CloneParagraphProperties(p); // ListMarker/ListType/ListLevel/ListMarkerBold حفظ می‌شوند
+                wrapped.Spans = new List<SpanData>();
+                wrapped.FillColor = null;
+                wrapped.Borders = null;
+                wrapped.KeepListMarkerVisible = true; // 🐞 به فلاتر می‌گوید شماره را بیرونِ {blk} رندر کن
+
+                var blankParentSpan = new SpanData
+                {
+                    Type = "text",
+                    InnerSpans = new List<SpanData>()
+                };
+                string combinedRawText = "";
+                var nonTextSpans = new List<SpanData>();
+
+                foreach (var span in p.Spans)
+                {
+                    if (span.Type == "text")
+                    {
+                        var cleanSpan = CloneSpan(span);
+                        if (!string.IsNullOrEmpty(cleanSpan.Content))
+                        {
+                            cleanSpan.Content = cleanSpan.Content.Replace("{blk}", "").Replace("{/blk}", "");
+                            blankParentSpan.InnerSpans.Add(cleanSpan);
+                            combinedRawText += cleanSpan.Content;
+                        }
+                    }
+                    else
+                    {
+                        nonTextSpans.Add(span);
+                    }
+                }
+
+                // اگر چیزی برای مخفی‌کردن نبود، پاراگراف را دست‌نخورده برگردان.
+                if (string.IsNullOrWhiteSpace(combinedRawText))
+                {
+                    result.Add(p);
+                    continue;
+                }
+
+                blankParentSpan.Content = "{blk}" + combinedRawText + "{/blk}";
+
+                var firstTextSpan = blankParentSpan.InnerSpans.FirstOrDefault();
+                if (firstTextSpan != null)
+                {
+                    // مثلِ BlankWord2: مارکرهای ساختاریِ b/i/u به دکمه‌ی والد ارث نرسند.
+                    blankParentSpan.Markers = firstTextSpan.Markers != null
+                        ? firstTextSpan.Markers.Where(m => m != "b" && m != "i" && m != "u").ToList()
+                        : new List<string>();
+                    blankParentSpan.FillColor = null;
+                    blankParentSpan.TextColor = null;
+                    blankParentSpan.Borders = null;
+                }
+
+                wrapped.Spans.Add(blankParentSpan);
+                wrapped.Spans.AddRange(nonTextSpans);
+                result.Add(wrapped);
+            }
+
+            return result;
+        }
+
         public List<ParagraphData> ParseParagraph(Paragraph p, MainDocumentPart mainPart, FontResolver resolver, string outputDir, bool inTable = false, bool audioMarkersAsSpans = false)
         {
             var basePara = new ParagraphData();
@@ -482,6 +590,12 @@ namespace CustomLayoutGenerator
                     basePara.ListMarker = _li.Value.Marker;
                     basePara.ListType = _li.Value.Kind;
                     basePara.ListLevel = _np.Value.Level;
+                    // 🐞 رفع باگِ «شماره‌ی لیست بولد نمی‌شود» (تمرینِ ۰۴ ص۲۴،
+                    // تمرینِ ۱۵/۱۶ ص۲۸): بولد بودنِ شماره از rPr سطحِ numbering
+                    // می‌آید (که در این کتاب‌ها <w:b/> دارد)، نه از رانِ متن.
+                    // فلاتر تا الان مارکر را با استایلِ ثابتِ non-bold رندر
+                    // می‌کرد؛ حالا این فیلد را می‌خواند.
+                    basePara.ListMarkerBold = Numbering(mainPart).LevelBold(_np.Value.NumId, _np.Value.Level);
                 }
             }
 
@@ -1105,6 +1219,7 @@ namespace CustomLayoutGenerator
                         if (element is Paragraph p)
                         {
                             bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
+                            bool isBlankWord3 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord3");
 
                             var cellParaDataList = ParseParagraph(p, mainPart, resolver, outputDir, true);
 
@@ -1118,6 +1233,10 @@ namespace CustomLayoutGenerator
                                 if (isBlankWord2)
                                 {
                                     foreach (var cp in cellParaDataList) _blankWord2Set.Add(cp);
+                                }
+                                if (isBlankWord3)
+                                {
+                                    foreach (var cp in cellParaDataList) _blankWord3Set.Add(cp);
                                 }
                             }
                         }
@@ -1167,6 +1286,7 @@ namespace CustomLayoutGenerator
                     }
 
                     cellData.Paragraphs = MergeBlankWord2Paragraphs(cellData.Paragraphs);
+                    cellData.Paragraphs = WrapBlankWord3Paragraphs(cellData.Paragraphs);
 
                     rowData.Cells.Add(cellData);
                 }
@@ -1283,6 +1403,8 @@ namespace CustomLayoutGenerator
                 ListType = source.ListType,
                 ListLevel = source.ListLevel,
                 ListMarker = source.ListMarker,
+                ListMarkerBold = source.ListMarkerBold,          // 🐞 حفظِ بولد بودنِ شماره هنگام clone
+                KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlankWord3
                 Spans = new List<SpanData>()
             };
         }
@@ -1392,6 +1514,30 @@ namespace CustomLayoutGenerator
                 if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) return false;
             }
             return true;
+        }
+
+        /// <summary>
+        /// آیا متن دستِ‌کم یک کاراکترِ واقعیِ complex-script دارد (عربی/فارسی/
+        /// عبری)؟ رقم/علامت/فاصله «complex-script» به‌حساب نمی‌آید. برای تصمیمِ
+        /// اعمالِ iCs/bCs استفاده می‌شود — چون این نشانه‌ها فقط رویِ همین
+        /// نوع متن اثرِ دیداری دارند.
+        /// </summary>
+        private static bool ContainsComplexScriptChar(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            foreach (var ch in text)
+            {
+                // Arabic (0600–06FF), Arabic Supplement/Extended (0750–077F, 08A0–08FF),
+                // Hebrew (0590–05FF), Arabic Presentation Forms (FB50–FDFF, FE70–FEFF)
+                if ((ch >= '\u0590' && ch <= '\u05FF') ||
+                    (ch >= '\u0600' && ch <= '\u06FF') ||
+                    (ch >= '\u0750' && ch <= '\u077F') ||
+                    (ch >= '\u08A0' && ch <= '\u08FF') ||
+                    (ch >= '\uFB50' && ch <= '\uFDFF') ||
+                    (ch >= '\uFE70' && ch <= '\uFEFF'))
+                    return true;
+            }
+            return false;
         }
 
         private bool IsBold(RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart, bool preferCs)
@@ -1573,8 +1719,25 @@ namespace CustomLayoutGenerator
             bool hasAnyDirectLatinStyle = rPr?.Bold != null || rPr?.Italic != null;
             bool preferCs = !hasAnyDirectLatinStyle && PrefersComplexScript(run.InnerText);
 
+            // 🐞 رفع باگِ «(07238)» صفحه‌ی ۱۷ (به‌اشتباه ایتالیک): این ران فقط
+            // <w:iCs/> دارد (نه <w:i/>) و متنش رقم/علامت است (بدونِ حرفِ لاتین)،
+            // پس preferCs=true می‌شد و همان iCsِ جعلی ایتالیکش می‌کرد. ولی در
+            // Word این عدد اصلاً ایتالیک نیست. تفاوتِ کلیدی با موردِ بولدِ «۰۱»:
+            // نشانه‌های CS (iCs/bCs) فقط وقتی واقعاً روی *ظاهر* اثر می‌گذارند که
+            // متن حقیقتاً complex-script باشد (عربی/فارسی/عبری) یا ران rtl باشد؛
+            // Word این نشانه‌ها را کنارِ تقریباً هر رانِ سندِ دوزبانه هم می‌گذارد
+            // بی‌آنکه رویِ متنِ لاتین/رقمی اثری داشته باشند. مشاهداتِ این پروژه هم
+            // نشان داده که خطاهای CS همیشه از نوعِ ایتالیکِ کاذب بوده‌اند (صفحه‌ی
+            // ۲۱: ۱۱۲ ایتالیکِ کاذب؛ صفحه‌ی ۱۴؛ و حالا «(07238)»). پس fallbackِ
+            // ایتالیکِ CS را سخت‌گیرانه‌تر می‌کنیم: فقط وقتی که ران واقعاً
+            // complex-script باشد. مسیرِ بولد (preferCs) دست‌نخورده می‌ماند تا
+            // بولدِ «۰۱» (که با bCs کار می‌کرد) regress نشود.
+            bool runIsRtl = rPr?.RightToLeftText != null &&
+                            (rPr.RightToLeftText.Val == null || rPr.RightToLeftText.Val.Value);
+            bool preferCsItalic = preferCs && (runIsRtl || ContainsComplexScriptChar(run.InnerText));
+
             if (IsBold(rPr, runStyleId, pStyleId, mainPart, preferCs)) markers.Add("b");
-            if (IsItalic(rPr, runStyleId, pStyleId, mainPart, preferCs)) markers.Add("i");
+            if (IsItalic(rPr, runStyleId, pStyleId, mainPart, preferCsItalic)) markers.Add("i");
 
             if (rPr?.Underline != null)
             {

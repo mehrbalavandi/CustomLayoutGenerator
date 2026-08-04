@@ -138,11 +138,20 @@ namespace CustomLayoutGenerator
                     break;
 
                 case "NormalTable":
-                    // 🐞 بدونِ اسکرولِ افقی (فشرده‌شدنِ عادی در عرضِ صفحه کافی
-                    // است)، ولی همه‌ی بوردرهایش باید دیده شوند.
-                    span.Borders = span.Borders ?? new BorderDetail();
-                    span.BorderMode = "all";
-                    span.WidthMode = "equal";
+                    // 🐞 درخواستِ کاربر: بوردرِ جدول فقط وقتی رسم شود که سندِ
+                    // اصلی واقعاً بوردر داشته باشد و آن بوردر solid باشد (نه
+                    // none/dotted/dashed). قبلاً NormalTable بی‌قیدوشرط
+                    // BorderMode="all" می‌گرفت، برای همین جدولِ کاملاً بی‌بوردرِ
+                    // تمرینِ ۰۸ صفحه‌ی ۲۶ (Borders خالی هم در سطحِ جدول هم در
+                    // سطحِ سلول‌ها) هم بوردر می‌گرفت — دقیقاً همان نقضِ قاعده‌ای
+                    // که کاربر گزارش کرد. حالا وقتی هیچ بوردرِ solidی در سند
+                    // نباشد BorderMode="none" می‌شود. بدونِ اسکرولِ افقی می‌ماند.
+                    {
+                        bool normalHasSolid = HasSolidBorderInSource(span);
+                        span.Borders = span.Borders ?? new BorderDetail();
+                        span.BorderMode = normalHasSolid ? "all" : "none";
+                        span.WidthMode = "equal";
+                    }
                     break;
 
                 case "TipTable":
@@ -194,6 +203,38 @@ namespace CustomLayoutGenerator
                     // خامِ per-cell/نامِ استایل رجوع می‌کند.
                     break;
             }
+        }
+
+        // 🐞 هم‌ارزِ سمتِ سی‌شارپِ همان منطقِ isSolidBorderStyle در فلاتر:
+        // فقط سبک‌های پیوسته (single/double/…)، نه none/nil/نقطه‌چین/خط‌چین.
+        private static bool IsSolidBorderStyle(string val)
+        {
+            if (string.IsNullOrEmpty(val)) return false;
+            var v = val.ToLowerInvariant();
+            if (v == "none" || v == "nil") return false;
+            if (v.Contains("dot") || v.Contains("dash")) return false;
+            return true;
+        }
+
+        // آیا خودِ سند برایِ این جدول بوردرِ solid تعریف کرده؟ (یا در سطحِ
+        // خودِ جدول، یا در سطحِ هر سلولی — هر کدام کافی است.)
+        private static bool HasSolidBorderInSource(SpanData span)
+        {
+            if (IsSolidBorderStyle(span.Borders?.Val)) return true;
+            if (span.TableRows == null) return false;
+            foreach (var row in span.TableRows)
+            {
+                if (row?.Cells == null) continue;
+                foreach (var cell in row.Cells)
+                {
+                    var cb = cell?.Borders;
+                    if (cb == null) continue;
+                    if (IsSolidBorderStyle(cb.Top?.Val) || IsSolidBorderStyle(cb.Bottom?.Val)
+                        || IsSolidBorderStyle(cb.Left?.Val) || IsSolidBorderStyle(cb.Right?.Val))
+                        return true;
+                }
+            }
+            return false;
         }
     }
 }
