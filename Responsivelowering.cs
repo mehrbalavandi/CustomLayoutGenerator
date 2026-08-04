@@ -175,6 +175,21 @@ namespace CustomLayoutGenerator
                     span.WidthMode = "proportional";
                     break;
 
+                case "HeaderOutsideTable":
+                    // 🐞 درخواستِ کاربر: مثلِ OutsideTable (اسکرولِ افقی + عرضِ
+                    // متناسب + فقط بوردرِ بیرونی)، ولی با دو تفاوت — (۱) بوردرِ
+                    // بالای جدول هم رسم شود (BorderMode="outerThickFirstRow"
+                    // مثلِ "outer" یک Border.all کاملِ چهارطرفه دورِ کل می‌کشد،
+                    // پس بالای جدول هم می‌آید)، و (۲) خطِ زیرِ ردیفِ اول (جداکننده‌ی
+                    // سرستون) ضخیم‌تر از بقیه‌ی خطوط دیده شود. رفتارِ عرض/اسکرول
+                    // دقیقاً همان OutsideTable است.
+                    span.ResponsiveStrategy = "horizontalScroll";
+                    span.Borders = span.Borders ?? new BorderDetail();
+                    if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
+                    span.BorderMode = "outerThickFirstRow";
+                    span.WidthMode = "proportional";
+                    break;
+
                 // 🐞 دو حالتِ جدید که کاربر برایِ آینده خواسته بود — از قبل
                 // آماده‌اند تا وقتی در Word یک جدول را با یکی از این نام‌ها
                 // استایل داد، بلافاصله کار کند، بدونِ نیاز به تغییرِ دیگری:
