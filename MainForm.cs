@@ -576,7 +576,7 @@ namespace CustomLayoutGenerator
             return result;
         }
 
-        public List<ParagraphData> ParseParagraph(Paragraph p, MainDocumentPart mainPart, FontResolver resolver, string outputDir, bool inTable = false, bool audioMarkersAsSpans = false)
+        public List<ParagraphData> ParseParagraph(Paragraph p, MainDocumentPart mainPart, FontResolver resolver, string outputDir, bool inTable = false, bool audioMarkersAsSpans = false, bool conditionalBold = false)
         {
             var basePara = new ParagraphData();
 
@@ -702,12 +702,12 @@ namespace CustomLayoutGenerator
                     string url = GetHyperlinkUrl(mainPart, hyperlink.Id);
                     foreach (var run in hyperlink.Elements<Run>())
                     {
-                        ProcessRun(run, mainPart, outputDir, basePara, p.ParagraphProperties, ref lastTextSpan, url);
+                        ProcessRun(run, mainPart, outputDir, basePara, p.ParagraphProperties, ref lastTextSpan, url, conditionalBold);
                     }
                 }
                 else if (element is Run run)
                 {
-                    ProcessRun(run, mainPart, outputDir, basePara, p.ParagraphProperties, ref lastTextSpan, null);
+                    ProcessRun(run, mainPart, outputDir, basePara, p.ParagraphProperties, ref lastTextSpan, null, conditionalBold);
                 }
             }
 
@@ -928,7 +928,7 @@ namespace CustomLayoutGenerator
             return result;
         }
 
-        private void ProcessRun(Run run, MainDocumentPart mainPart, string outputDir, ParagraphData paraData, ParagraphProperties pPr, ref SpanData lastTextSpan, string hyperlinkUrl)
+        private void ProcessRun(Run run, MainDocumentPart mainPart, string outputDir, ParagraphData paraData, ParagraphProperties pPr, ref SpanData lastTextSpan, string hyperlinkUrl, bool conditionalBold = false)
         {
             if (run.Descendants<LastRenderedPageBreak>().Any() ||
                 run.Elements<Break>().Any(b => b.Type != null && b.Type.Value == BreakValues.Page))
@@ -995,7 +995,7 @@ namespace CustomLayoutGenerator
                 runText = "{blk}" + runText + "{/blk}";
             }
 
-            List<string> currentMarkers = ExtractRunMarkers(run, pPr, mainPart);
+            List<string> currentMarkers = ExtractRunMarkers(run, pPr, mainPart, conditionalBold);
             string runShading = run.RunProperties?.Shading?.Fill?.Value;
             if (runShading == "auto") runShading = null;
 
@@ -1073,6 +1073,36 @@ namespace CustomLayoutGenerator
             }
         }
 
+        // 🐞 آیا استایلِ جدول برای این نوعِ conditional (firstRow/firstCol/…)
+        // بولد تعریف کرده؟ (tblStylePr type="…" → rPr/<w:b/>). زنجیره‌ی basedOn
+        // را هم دنبال می‌کند. برای رفعِ «سرستونِ Grid Table بولد نمی‌شود».
+        private bool TableStyleConditionalBold(MainDocumentPart mainPart, string styleId, TableStyleOverrideValues type)
+        {
+            if (string.IsNullOrEmpty(styleId)) return false;
+            var styles = mainPart?.StyleDefinitionsPart?.Styles;
+            if (styles == null) return false;
+
+            const string wns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+            var style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == styleId);
+            int guard = 0;
+            while (style != null && guard++ < 12)
+            {
+                var tsp = style.Elements<TableStyleProperties>()
+                    .FirstOrDefault(t => t.Type != null && t.Type.Value == type);
+                // 🐞 <w:rPr> داخلِ <w:tblStylePr> در SDK نامِ property ثابتی ندارد،
+                // پس عنصر را با نامِ محلی پیدا می‌کنیم و بعد <w:b/> را می‌خوانیم.
+                var rpr = tsp?.ChildElements
+                    .FirstOrDefault(e => e.LocalName == "rPr" && e.NamespaceUri == wns);
+                var b = rpr?.GetFirstChild<Bold>();
+                if (b != null) return b.Val == null || b.Val.Value;
+
+                var basedOn = style.BasedOn?.Val?.Value;
+                if (string.IsNullOrEmpty(basedOn)) break;
+                style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == basedOn);
+            }
+            return false;
+        }
+
         public SpanData ParseTable(Table table, MainDocumentPart mainPart, FontResolver resolver, string outputDir)
         {
             var tableSpan = new SpanData { Type = "table" };
@@ -1082,6 +1112,22 @@ namespace CustomLayoutGenerator
             if (tableProps.ContainsKey("tableStyleName")) tableSpan.TableStyleName = tableProps["tableStyleName"];
             if (tableProps.ContainsKey("tableStyleId")) tableSpan.TableStyleId = tableProps["tableStyleId"];
             if (tableProps.ContainsKey("alignment")) tableSpan.TableAlignment = tableProps["alignment"];
+
+            // 🐞 بولدِ conditional استایلِ جدول (firstRow/firstCol/…): یک‌بار
+            // برای کلِ جدول حساب می‌شود، بعد per-cell (با احترام به تنظیمِ
+            // مستقیمِ ران) اعمال می‌گردد. tblLook تعیین می‌کند کدام conditionalها
+            // فعال‌اند (مثلِ firstRow="1").
+            var _tblLook = table.Elements<TableProperties>().FirstOrDefault()?.TableLook;
+            bool lookFirstRow = _tblLook?.FirstRow?.Value ?? false;
+            bool lookFirstCol = _tblLook?.FirstColumn?.Value ?? false;
+            bool lookLastRow = _tblLook?.LastRow?.Value ?? false;
+            bool lookLastCol = _tblLook?.LastColumn?.Value ?? false;
+            string _tblStyleId = table.Elements<TableProperties>().FirstOrDefault()?.TableStyle?.Val?.Value;
+            bool condFirstRowBold = lookFirstRow && TableStyleConditionalBold(mainPart, _tblStyleId, TableStyleOverrideValues.FirstRow);
+            bool condFirstColBold = lookFirstCol && TableStyleConditionalBold(mainPart, _tblStyleId, TableStyleOverrideValues.FirstColumn);
+            bool condLastRowBold = lookLastRow && TableStyleConditionalBold(mainPart, _tblStyleId, TableStyleOverrideValues.LastRow);
+            bool condLastColBold = lookLastCol && TableStyleConditionalBold(mainPart, _tblStyleId, TableStyleOverrideValues.LastColumn);
+            int _tblRowCount = table.Elements<TableRow>().Count();
             bool hasBorderInfo = tableProps.ContainsKey("borderColor") || tableProps.ContainsKey("borderWidth");
 
             if (hasBorderInfo)
@@ -1122,8 +1168,10 @@ namespace CustomLayoutGenerator
                 }
             }
 
+            int _rowIndex = -1;
             foreach (var row in table.Elements<TableRow>())
             {
+                _rowIndex++;
                 var rowData = new TableRowData();
                 var trPr = row.TableRowProperties;
                 if (trPr != null && trPr.Elements<TableHeader>().Any()) rowData.IsHeader = true;
@@ -1218,6 +1266,19 @@ namespace CustomLayoutGenerator
                     if (cellProps.ContainsKey("rowMerge")) cellData.RowMerge = cellProps["rowMerge"];
                     cellData.Borders = ExtractSmartCellBorders(cell); // 🌟 تزریق مرزهای استخراج‌شده
 
+                    // 🐞 آیا این سلول تحتِ conditional formattingِ بولدِ استایلِ
+                    // جدول است؟ (ردیفِ اول/ستونِ اول/…). ران‌های داخلش اگر خودشان
+                    // بولد را مستقیماً تعیین نکرده باشند، بولد می‌شوند.
+                    bool _isFirstCol = i == 0;
+                    bool _isLastCol = i == cells.Count - 1;
+                    bool _isFirstRow = _rowIndex == 0;
+                    bool _isLastRow = _rowIndex == _tblRowCount - 1;
+                    bool cellConditionalBold =
+                        (_isFirstRow && condFirstRowBold) ||
+                        (_isFirstCol && condFirstColBold) ||
+                        (_isLastRow && condLastRowBold) ||
+                        (_isLastCol && condLastColBold);
+
                     // 🌟 بررسی تمام فرزندان سلول (پاراگراف و جدول‌های تودرتو)
                     foreach (var element in cell.Elements())
                     {
@@ -1226,7 +1287,7 @@ namespace CustomLayoutGenerator
                             bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
                             bool isBlankWord3 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord3");
 
-                            var cellParaDataList = ParseParagraph(p, mainPart, resolver, outputDir, true);
+                            var cellParaDataList = ParseParagraph(p, mainPart, resolver, outputDir, true, conditionalBold: cellConditionalBold);
 
                             cellParaDataList.RemoveAll(pr =>
                                 pr.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
@@ -1703,7 +1764,7 @@ namespace CustomLayoutGenerator
             return null;
         }
 
-        private List<string> ExtractRunMarkers(Run run, ParagraphProperties pPr, MainDocumentPart mainPart)
+        private List<string> ExtractRunMarkers(Run run, ParagraphProperties pPr, MainDocumentPart mainPart, bool conditionalBold = false)
         {
             var markers = new List<string>();
             var rPr = run.RunProperties;
@@ -1742,6 +1803,11 @@ namespace CustomLayoutGenerator
             bool preferCsItalic = preferCs && (runIsRtl || ContainsComplexScriptChar(run.InnerText));
 
             if (IsBold(rPr, runStyleId, pStyleId, mainPart, preferCs)) markers.Add("b");
+            // 🐞 بولدِ conditional استایلِ جدول (مثلِ firstRow در Grid Table):
+            // فقط وقتی اعمال می‌شود که رانْ خودش بولد را مستقیماً تعیین نکرده
+            // باشد (rPr.Bold == null). اگر ران <w:b w:val="0"/> داشته باشد یعنی
+            // عمداً خاموش شده (مثلِ سلول‌های ستونِ اولِ بدنه) و دست‌نخورده می‌ماند.
+            else if (conditionalBold && rPr?.Bold == null) markers.Add("b");
             if (IsItalic(rPr, runStyleId, pStyleId, mainPart, preferCsItalic)) markers.Add("i");
 
             if (rPr?.Underline != null)
