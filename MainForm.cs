@@ -1206,6 +1206,11 @@ namespace CustomLayoutGenerator
                             (rowCellWidths[i] / rowTotalWidth) * (tableSpan.TableWidthPercent ?? 100),
                             2);
 
+                    // 🐞 CommonTable: عرضِ مطلقِ همین سلول به point (twips ÷ ۲۰).
+                    // برای استایل‌های دیگر بی‌اثر است (فقط WidthPercent را می‌خوانند).
+                    if (i < rowCellWidths.Count && rowCellWidths[i] > 0)
+                        cellData.WidthPt = Math.Round(rowCellWidths[i] / 20.0, 2);
+
                     var cellProps = ExtractCellProperties(cell);
                     if (cellProps.ContainsKey("shading")) cellData.FillColor = cellProps["shading"];
                     if (cellProps.ContainsKey("vAlign")) cellData.VAlign = cellProps["vAlign"];

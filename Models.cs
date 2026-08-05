@@ -159,6 +159,11 @@ namespace CustomLayoutGenerator
         public List<ParagraphData> Paragraphs { get; set; } = new List<ParagraphData>();
         public string FillColor { get; set; }
         public double? WidthPercent { get; set; }
+        // 🐞 CommonTable: عرضِ مطلقِ سلول به point (twips/20). چون اپ فونت را
+        // ۱pt→۱px رندر می‌کند (sz:23 → ۱۱.۵px)، همین عدد مستقیماً px منطقیِ
+        // فلاتر است؛ فلاتر مجموعِ ستون‌ها را با عرضِ دستگاه مقایسه می‌کند تا
+        // تصمیمِ اسکرولِ افقی قطعی و بی‌نیاز از حدسِ اندازه‌گیریِ محتوا باشد.
+        public double? WidthPt { get; set; }
         public string VAlign { get; set; }
         public int? ColSpan { get; set; }
         public string RowMerge { get; set; }
