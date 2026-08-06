@@ -386,6 +386,22 @@ namespace CustomLayoutGenerator
                 {
                     var p = group[i];
 
+                    // 🐞 صفحه ۱۰ تمرین ۸: حفظِ تورفتگیِ پاراگراف در محتوای
+                    // merged. چون merge خطوط را با \n به هم می‌چسباند، تورفتگیِ
+                    // per-paragraphِ سند (IndentLeft) گم می‌شد و مودال همه را
+                    // چسبیده به لبه نشان می‌داد. آن را تقریبی با فاصله‌های ابتدای
+                    // خط بازتولید می‌کنیم (هر ~۳.۵pt ≈ یک فاصله) تا در مودال
+                    // دیده شود. (چون محتوای merged یک متنِ روانِ تک‌اسپن است،
+                    // تورفتگیِ دقیقِ چندخطی ممکن نیست؛ این تقریبِ خطِ اول است.)
+                    if (p.IndentLeft.HasValue && p.IndentLeft.Value > 2.0)
+                    {
+                        int spaces = (int)Math.Round(p.IndentLeft.Value / 3.5);
+                        spaces = Math.Min(Math.Max(spaces, 1), 24);
+                        string pad = new string(' ', spaces);
+                        blankParentSpan.InnerSpans.Add(new SpanData { Type = "text", Content = pad });
+                        combinedRawText += pad;
+                    }
+
                     // 🐞 رفع باگِ گم‌شدنِ شماره‌های ۲ به بعد: merged فقط مارکرِ
                     // group[0] را نگه می‌دارد (در CloneParagraphProperties)، پس
                     // بدونِ این تزریق، ListMarker خودِ این پاراگراف (که
