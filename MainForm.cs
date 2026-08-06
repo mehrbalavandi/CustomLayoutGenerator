@@ -386,21 +386,17 @@ namespace CustomLayoutGenerator
                 {
                     var p = group[i];
 
-                    // 🐞 صفحه ۱۰ تمرین ۸: حفظِ تورفتگیِ پاراگراف در محتوای
-                    // merged. چون merge خطوط را با \n به هم می‌چسباند، تورفتگیِ
-                    // per-paragraphِ سند (IndentLeft) گم می‌شد و مودال همه را
-                    // چسبیده به لبه نشان می‌داد. آن را تقریبی با فاصله‌های ابتدای
-                    // خط بازتولید می‌کنیم (هر ~۳.۵pt ≈ یک فاصله) تا در مودال
-                    // دیده شود. (چون محتوای merged یک متنِ روانِ تک‌اسپن است،
-                    // تورفتگیِ دقیقِ چندخطی ممکن نیست؛ این تقریبِ خطِ اول است.)
-                    if (p.IndentLeft.HasValue && p.IndentLeft.Value > 2.0)
-                    {
-                        int spaces = (int)Math.Round(p.IndentLeft.Value / 3.5);
-                        spaces = Math.Min(Math.Max(spaces, 1), 24);
-                        string pad = new string(' ', spaces);
-                        blankParentSpan.InnerSpans.Add(new SpanData { Type = "text", Content = pad });
-                        combinedRawText += pad;
-                    }
+                    // 🐞 صفحه ۱۰ تمرین ۸: تورفتگیِ per-paragraph را ساختاریافته
+                    // منتقل می‌کنیم (نه با فاصله‌های تقریبی): مقدارِ IndentLeft را
+                    // به‌صورتِ مارکرِ «pindent:<points>» روی *اولین اسپنِ* همین
+                    // پاراگراف می‌گذاریم. سمتِ Flutter در مودال/toast هر پاراگراف
+                    // را در بلاکِ جدا با padding واقعی رندر می‌کند؛ رندرِ تختِ
+                    // قبلی این مارکر را نادیده می‌گیرد (روی استایل اثر ندارد).
+                    string _pindentMarker = "pindent:" +
+                        ((p.IndentLeft.HasValue && p.IndentLeft.Value > 0)
+                            ? p.IndentLeft.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                            : "0");
+                    bool _paraFirstSpan = true;
 
                     // 🐞 رفع باگِ گم‌شدنِ شماره‌های ۲ به بعد: merged فقط مارکرِ
                     // group[0] را نگه می‌دارد (در CloneParagraphProperties)، پس
@@ -434,6 +430,8 @@ namespace CustomLayoutGenerator
                         // numbering) رعایت می‌شود — هم‌راستا با فیکسِ ListMarkerBold.
                         var markerMarkers = new List<string>();
                         if (p.ListMarkerBold == true) markerMarkers.Add("b");
+                        markerMarkers.Add(_pindentMarker); // 🐞 تورفتگیِ پاراگراف
+                        _paraFirstSpan = false;
                         var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + "  ", Markers = markerMarkers };
                         blankParentSpan.InnerSpans.Add(markerSpan);
                         combinedRawText += p.ListMarker + "  ";
@@ -447,6 +445,14 @@ namespace CustomLayoutGenerator
                             if (!string.IsNullOrEmpty(cleanSpan.Content))
                             {
                                 cleanSpan.Content = cleanSpan.Content.Replace("{blk}", "").Replace("{/blk}", "");
+                                // 🐞 مارکرِ تورفتگی روی اولین اسپنِ متنیِ پاراگراف
+                                if (_paraFirstSpan)
+                                {
+                                    if (cleanSpan.Markers == null) cleanSpan.Markers = new List<string>();
+                                    else cleanSpan.Markers = new List<string>(cleanSpan.Markers);
+                                    cleanSpan.Markers.Add(_pindentMarker);
+                                    _paraFirstSpan = false;
+                                }
                                 blankParentSpan.InnerSpans.Add(cleanSpan);
                                 combinedRawText += cleanSpan.Content;
                             }
