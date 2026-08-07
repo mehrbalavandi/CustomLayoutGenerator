@@ -619,6 +619,22 @@ namespace CustomLayoutGenerator
                     // می‌کرد؛ حالا این فیلد را می‌خواند.
                     basePara.ListMarkerBold = Numbering(mainPart).LevelBold(_np.Value.NumId, _np.Value.Level);
                 }
+
+                // 🐞 صفحه ۱۵ تمرین ۹ (لیستِ تودرتو): تورفتگیِ لیست اغلب در
+                // تعریفِ numbering (w:lvl/w:pPr/w:ind) است، نه w:ind مستقیمِ
+                // پاراگراف. بدونِ خواندنِ آن، لیستِ درونی (numId متفاوت با left
+                // بزرگ‌تر — این‌جا ۷۲۰ در برابرِ ۳۶۰ twips) هم‌ترازِ لیستِ بیرونی
+                // می‌افتاد. این‌جا به‌عنوانِ مقدارِ اولیه از سطحِ numbering
+                // می‌گیریم؛ اگر پاراگراف w:ind مستقیم داشته باشد، پایین‌تر
+                // override می‌شود (اولویت با تنظیمِ مستقیمِ پاراگراف).
+                var _lind = Numbering(mainPart).LevelIndent(_np.Value.NumId, _np.Value.Level);
+                if (_lind != null)
+                {
+                    if (_lind.Value.LeftTwips.HasValue)
+                        basePara.IndentLeft = _lind.Value.LeftTwips.Value / 20.0;
+                    if (_lind.Value.HangingTwips.HasValue)
+                        basePara.IndentFirstLine = -(_lind.Value.HangingTwips.Value / 20.0);
+                }
             }
 
             // استخراج استایل و خواص پایه پاراگراف
