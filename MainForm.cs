@@ -1166,7 +1166,7 @@ namespace CustomLayoutGenerator
             bool condLastRowBold = lookLastRow && TableStyleConditionalBold(mainPart, _tblStyleId, TableStyleOverrideValues.LastRow);
             bool condLastColBold = lookLastCol && TableStyleConditionalBold(mainPart, _tblStyleId, TableStyleOverrideValues.LastColumn);
             int _tblRowCount = table.Elements<TableRow>().Count();
-            bool hasBorderInfo = tableProps.ContainsKey("borderColor") || tableProps.ContainsKey("borderWidth");
+            bool hasBorderInfo = tableProps.ContainsKey("borderColor") || tableProps.ContainsKey("borderWidth") || tableProps.ContainsKey("borderStyle");
 
             if (hasBorderInfo)
             {
@@ -1182,9 +1182,13 @@ namespace CustomLayoutGenerator
                 if (tableProps.ContainsKey("borderWidth") && double.TryParse(tableProps["borderWidth"], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double bw))
                     tableSpan.Borders.Width = bw;
 
-                // تنظیم یک استایل پیش‌فرض برای کادر تا در فلاتر قابل شناسایی باشد
+                // 🐞 استایلِ بوردر را از استایلِ واقعیِ سند می‌گیریم (single/dashed/
+                // dotted/…)، نه پیش‌فرضِ ثابتِ "single". این‌طور قانونِ فلاتر
+                // (مخفی‌کردنِ بوردرِ غیرsolid برای جداولِ layout) درست کار می‌کند.
                 if (string.IsNullOrEmpty(tableSpan.Borders.Val))
-                    tableSpan.Borders.Val = "single";
+                    tableSpan.Borders.Val = tableProps.ContainsKey("borderStyle")
+                        ? tableProps["borderStyle"]
+                        : "single";
             }
 
 
@@ -2141,6 +2145,12 @@ namespace CustomLayoutGenerator
 
                 if (hasBorders)
                 {
+                    // 🐞 استایلِ واقعیِ بوردر (single/dashed/dotted/…) را هم منتقل
+                    // می‌کنیم؛ وگرنه بعداً پیش‌فرضِ "single" جایش می‌نشست و بوردرِ
+                    // غیرsolidِ استایل (مثلِ dashedِ ColumnStackTable) به اشتباه
+                    // solid دیده می‌شد و در فلاتر نشان داده می‌شد.
+                    if (border.Val != null)
+                        props.Add("borderStyle", border.Val.Value.ToString().ToLowerInvariant());
                     if (border.Color != null && border.Color.Value != "auto")
                     {
                         props.Add("borderColor", border.Color.Value);
