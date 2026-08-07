@@ -2145,12 +2145,14 @@ namespace CustomLayoutGenerator
 
                 if (hasBorders)
                 {
-                    // 🐞 استایلِ واقعیِ بوردر (single/dashed/dotted/…) را هم منتقل
-                    // می‌کنیم؛ وگرنه بعداً پیش‌فرضِ "single" جایش می‌نشست و بوردرِ
-                    // غیرsolidِ استایل (مثلِ dashedِ ColumnStackTable) به اشتباه
-                    // solid دیده می‌شد و در فلاتر نشان داده می‌شد.
-                    if (border.Val != null)
-                        props.Add("borderStyle", border.Val.Value.ToString().ToLowerInvariant());
+                    // 🐞 استایلِ واقعیِ بوردر را از InnerText می‌گیریم. در این
+                    // نسخه‌ی OpenXML، BorderValues یک struct است و
+                    // border.Val.Value.ToString() رشته‌ی بی‌معنیِ "bordervalues { }"
+                    // می‌داد (نه "dashed") — پس بوردرِ dashed به اشتباه solid دیده
+                    // می‌شد. InnerText مقدارِ خامِ XML ("dashed"/"single"/…) را می‌دهد.
+                    string _bStyle = border.Val.InnerText;
+                    if (!string.IsNullOrEmpty(_bStyle))
+                        props.Add("borderStyle", _bStyle.ToLowerInvariant());
                     if (border.Color != null && border.Color.Value != "auto")
                     {
                         props.Add("borderColor", border.Color.Value);
