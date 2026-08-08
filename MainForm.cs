@@ -749,6 +749,13 @@ namespace CustomLayoutGenerator
                 }
             }
 
+            // 🐞 ادغامِ اسپن‌های {blk}ِ متوالی (BlankWord1 که به‌خاطرِ فرمتِ
+            // متفاوتِ بخش‌هایش — مثلاً بخشی ایتالیک، بخشی نرمال — به چند run/اسپنِ
+            // {blk} شکسته شده) در یک اسپنِ واحد با InnerSpans. وگرنه فلاتر برای هر
+            // اسپنِ {blk} یک آیکونِ چشمِ جدا می‌سازد (ص۴۰ تمرین۰۲: دو آیکون به‌جای
+            // یک). مودال بخش‌های استایل‌دار را از InnerSpans حفظ می‌کند.
+            MergeConsecutiveInlineBlanks(basePara.Spans);
+
             string combinedPattern = @"(\[AudioStart:\s*.+?\]|\[(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[\d+\]|\[AudioEnd:\s*(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[AudioEnd\])";
 
             // 🐞 حالتِ جدید: به‌جای شکستنِ متن به چند پاراگرافِ جدا (که فقط
@@ -1253,19 +1260,30 @@ namespace CustomLayoutGenerator
                     if (tcPr?.GridSpan != null && tcPr.GridSpan.Val != null)
                         colSpan = tcPr.GridSpan.Val.Value;
 
+                    // عرضِ گریدِ همین سلول (با احتسابِ ادغام) را جدا حساب می‌کنیم.
+                    double gridWidthForCell = 0;
+                    if (baseGridWidths.Count > 0)
+                    {
+                        for (int c = 0; c < colSpan; c++)
+                        {
+                            if (currentGridIndex + c < baseGridWidths.Count)
+                                gridWidthForCell += baseGridWidths[currentGridIndex + c];
+                        }
+                    }
+
                     if (cellHasExplicitDxaWidth)
                     {
                         cellWidth = wVal;
                     }
 
-                    // اولویت دوم (فال‌بک): استفاده از شبکه اصلی جدول با احتساب ادغام سلول‌ها
-                    if (cellWidth <= 0 && baseGridWidths.Count > 0)
+                    // 🐞 اولویت با گرید وقتی از tcWِ سلول بزرگ‌تر است: Word در حالتِ
+                    // autofit ستون را باریک‌تر از عرضِ گریدش رندر نمی‌کند. مثالِ
+                    // ص۳۶ word-box: ستونِ آخر tcW=237tw (۱۱.۸۵pt) ولی گرید=۱۰۴۱tw
+                    // (۵۲.۰۵pt) که "Olympic" را جا می‌دهد؛ قبلاً tcWِ کوچک ملاک
+                    // می‌شد و متن بیرون می‌زد. حالا max(tcW, grid).
+                    if (gridWidthForCell > cellWidth)
                     {
-                        for (int c = 0; c < colSpan; c++)
-                        {
-                            if (currentGridIndex + c < baseGridWidths.Count)
-                                cellWidth += baseGridWidths[currentGridIndex + c];
-                        }
+                        cellWidth = gridWidthForCell;
                     }
 
                     rowCellWidths.Add(cellWidth);
@@ -1515,6 +1533,75 @@ namespace CustomLayoutGenerator
                 KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlankWord3
                 Spans = new List<SpanData>()
             };
+        }
+
+        // 🐞 آیا محتوای این اسپن دقیقاً یک {blk}...{/blk}ِ کامل است (یک
+        // BlankWord1ِ inlineِ کامل)، نه یک جای‌خالیِ کوچکِ درونِ متنِ بلندتر.
+        private bool IsWhollyOneInlineBlank(SpanData s)
+        {
+            if (s == null || s.Type != "text" || string.IsNullOrEmpty(s.Content)) return false;
+            var t = s.Content;
+            if (!t.StartsWith("{blk}") || !t.EndsWith("{/blk}")) return false;
+            int count = 0, idx = 0;
+            while ((idx = t.IndexOf("{blk}", idx, StringComparison.Ordinal)) >= 0) { count++; idx += 5; }
+            return count == 1;
+        }
+
+        private string UnwrapBlk(string content)
+        {
+            var t = content ?? "";
+            if (t.StartsWith("{blk}")) t = t.Substring(5);
+            if (t.EndsWith("{/blk}")) t = t.Substring(0, t.Length - 6);
+            return t;
+        }
+
+        // 🐞 اسپن‌های {blk}ِ متوالی را در یک اسپنِ واحد ادغام می‌کند: Content یک
+        // {blk}...{/blk}ِ سرجمع (پس فلاتر فقط یک آیکونِ چشم می‌سازد) و InnerSpans
+        // شاملِ بخش‌های استایل‌دارِ اصلی (پس مودال ایتالیک/نرمالِ هر بخش را حفظ
+        // می‌کند). فقط وقتی ≥۲ اسپنِ {blk}ِ پشتِ‌سرِهم باشند ادغام می‌شود.
+        private void MergeConsecutiveInlineBlanks(List<SpanData> spans)
+        {
+            if (spans == null || spans.Count < 2) return;
+            var result = new List<SpanData>();
+            int i = 0;
+            while (i < spans.Count)
+            {
+                if (IsWhollyOneInlineBlank(spans[i]))
+                {
+                    int j = i;
+                    while (j < spans.Count && IsWhollyOneInlineBlank(spans[j])) j++;
+                    int runLen = j - i;
+                    if (runLen == 1)
+                    {
+                        result.Add(spans[i]);
+                    }
+                    else
+                    {
+                        var merged = CloneSpan(spans[i]);
+                        merged.InnerSpans = new List<SpanData>();
+                        string combined = "";
+                        for (int k = i; k < j; k++)
+                        {
+                            string inner = UnwrapBlk(spans[k].Content);
+                            var innerSpan = CloneSpan(spans[k]);
+                            innerSpan.Content = inner;
+                            innerSpan.InnerSpans = new List<SpanData>();
+                            merged.InnerSpans.Add(innerSpan);
+                            combined += inner;
+                        }
+                        merged.Content = "{blk}" + combined + "{/blk}";
+                        result.Add(merged);
+                    }
+                    i = j;
+                }
+                else
+                {
+                    result.Add(spans[i]);
+                    i++;
+                }
+            }
+            spans.Clear();
+            spans.AddRange(result);
         }
 
         private SpanData CloneSpan(SpanData source)
