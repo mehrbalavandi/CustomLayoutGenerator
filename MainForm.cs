@@ -1624,7 +1624,13 @@ namespace CustomLayoutGenerator
                 TableStyleId = source.TableStyleId,
                 TableAlignment = source.TableAlignment,
                 TableWidthPercent = source.TableWidthPercent,
-                TableRows = source.TableRows
+                TableRows = source.TableRows,
+                // 🐞 InnerSpans هم باید کپی شود؛ وگرنه هرجا اسپنِ merged (جای‌خالیِ
+                // BlankWord1ِ چنداستایله یا BlankWord2ِ ادغام‌شده) دوباره Clone شود،
+                // بخش‌های استایل‌دار گم می‌شوند و مودال به متنِ تخت با یک استایل
+                // برمی‌گردد. کپیِ کم‌عمقِ لیست کافی است (innerها فقط برای رندر
+                // خوانده می‌شوند).
+                InnerSpans = source.InnerSpans != null ? new List<SpanData>(source.InnerSpans) : new List<SpanData>()
             };
         }
 
