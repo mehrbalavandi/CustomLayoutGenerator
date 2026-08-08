@@ -1253,19 +1253,30 @@ namespace CustomLayoutGenerator
                     if (tcPr?.GridSpan != null && tcPr.GridSpan.Val != null)
                         colSpan = tcPr.GridSpan.Val.Value;
 
+                    // عرضِ گریدِ همین سلول (با احتسابِ ادغام) را جدا حساب می‌کنیم.
+                    double gridWidthForCell = 0;
+                    if (baseGridWidths.Count > 0)
+                    {
+                        for (int c = 0; c < colSpan; c++)
+                        {
+                            if (currentGridIndex + c < baseGridWidths.Count)
+                                gridWidthForCell += baseGridWidths[currentGridIndex + c];
+                        }
+                    }
+
                     if (cellHasExplicitDxaWidth)
                     {
                         cellWidth = wVal;
                     }
 
-                    // اولویت دوم (فال‌بک): استفاده از شبکه اصلی جدول با احتساب ادغام سلول‌ها
-                    if (cellWidth <= 0 && baseGridWidths.Count > 0)
+                    // 🐞 اولویت با گرید وقتی از tcWِ سلول بزرگ‌تر است: Word در حالتِ
+                    // autofit ستون را باریک‌تر از عرضِ گریدش رندر نمی‌کند. مثالِ
+                    // ص۳۶ word-box: ستونِ آخر tcW=237tw (۱۱.۸۵pt) ولی گرید=۱۰۴۱tw
+                    // (۵۲.۰۵pt) که "Olympic" را جا می‌دهد؛ قبلاً tcWِ کوچک ملاک
+                    // می‌شد و متن بیرون می‌زد. حالا max(tcW, grid).
+                    if (gridWidthForCell > cellWidth)
                     {
-                        for (int c = 0; c < colSpan; c++)
-                        {
-                            if (currentGridIndex + c < baseGridWidths.Count)
-                                cellWidth += baseGridWidths[currentGridIndex + c];
-                        }
+                        cellWidth = gridWidthForCell;
                     }
 
                     rowCellWidths.Add(cellWidth);
