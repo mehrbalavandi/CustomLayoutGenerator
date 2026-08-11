@@ -1955,6 +1955,25 @@ namespace CustomLayoutGenerator
                 if (uVal != UnderlineValues.None) markers.Add("u");
             }
 
+            // 🐞 خط‌خورده (strikethrough): Word دو حالت دارد — <w:strike/> ساده و
+            // <w:dstrike/> دوخط. هر دو را به یک مارکرِ "s" نگاشت می‌کنیم (فلاتر
+            // فقط lineThrough دارد). w:val="0" یعنی صراحتاً خاموش.
+            bool _strike = (rPr?.Strike != null && (rPr.Strike.Val == null || rPr.Strike.Val.Value)) ||
+                           (rPr?.DoubleStrike != null && (rPr.DoubleStrike.Val == null || rPr.DoubleStrike.Val.Value));
+            if (_strike) markers.Add("s");
+
+            // 🐞 بالانویس/زیرنویس: در OOXML از <w:vertAlign w:val="superscript|subscript"/>
+            // می‌آید. مقدارِ "baseline" یعنی عادی و مارکری تولید نمی‌کند.
+            var _vAlign = rPr?.VerticalTextAlignment?.Val;
+            if (_vAlign != null)
+            {
+                // InnerText به‌جای .Value.ToString() — همان درسِ BorderValues:
+                // این enumها در این نسخه‌ی SDK به‌درستی stringify نمی‌شوند.
+                string vt = rPr.VerticalTextAlignment.Val.InnerText?.ToLowerInvariant();
+                if (vt == "superscript") markers.Add("sup");
+                else if (vt == "subscript") markers.Add("sub");
+            }
+
             var shading = rPr?.Shading?.Fill?.Value;
             if (shading != null && shading != "auto") markers.Add($"bg:{shading}");
 
