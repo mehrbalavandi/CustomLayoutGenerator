@@ -433,6 +433,8 @@ namespace CustomLayoutGenerator
                         markerMarkers.Add(_pindentMarker); // 🐞 تورفتگیِ پاراگراف
                         _paraFirstSpan = false;
                         var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + "  ", Markers = markerMarkers };
+                        // 🐞 رنگِ شماره در مودالِ متنِ مخفی هم حفظ شود
+                        if (!string.IsNullOrEmpty(p.ListMarkerColor)) markerSpan.TextColor = p.ListMarkerColor;
                         blankParentSpan.InnerSpans.Add(markerSpan);
                         combinedRawText += p.ListMarker + "  ";
                     }
@@ -618,6 +620,7 @@ namespace CustomLayoutGenerator
                     // فلاتر تا الان مارکر را با استایلِ ثابتِ non-bold رندر
                     // می‌کرد؛ حالا این فیلد را می‌خواند.
                     basePara.ListMarkerBold = Numbering(mainPart).LevelBold(_np.Value.NumId, _np.Value.Level);
+                    basePara.ListMarkerColor = Numbering(mainPart).LevelColor(_np.Value.NumId, _np.Value.Level);
                 }
 
                 // 🐞 صفحه ۱۵ تمرین ۹ (لیستِ تودرتو): تورفتگیِ لیست اغلب در
@@ -1530,6 +1533,7 @@ namespace CustomLayoutGenerator
                 ListLevel = source.ListLevel,
                 ListMarker = source.ListMarker,
                 ListMarkerBold = source.ListMarkerBold,          // 🐞 حفظِ بولد بودنِ شماره هنگام clone
+                ListMarkerColor = source.ListMarkerColor,        // 🐞 حفظِ رنگِ شماره هنگام clone
                 KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlankWord3
                 Spans = new List<SpanData>()
             };

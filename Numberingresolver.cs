@@ -1,8 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
+using Color = DocumentFormat.OpenXml.Wordprocessing.Color;
 
 namespace CustomLayoutGenerator
 {
@@ -149,6 +151,23 @@ namespace CustomLayoutGenerator
             var b = rpr.GetFirstChild<Bold>();
             if (b == null) return false;
             return b.Val == null || b.Val.Value;
+        }
+
+        // 🐞 رنگِ نشانگرِ خودکارِ لیست: مثلِ LevelBold از rPrِ سطحِ numbering
+        // (<w:lvl>/<w:rPr>/<w:color>) خوانده می‌شود، نه از رانِ متن — چون کاربر
+        // رنگ را روی خودِ نشانگر تنظیم می‌کند و آن‌جا ذخیره می‌شود.
+        // خروجی: هگزِ ۶ رقمی بدونِ #، یا null اگر تعریف نشده / auto باشد.
+        public string LevelColor(int numId, int level)
+        {
+            if (!_absByNum.TryGetValue(numId, out var abs)) return null;
+            var lvlDef = LevelOf(abs, level);
+            var rpr = lvlDef?.NumberingSymbolRunProperties;
+            if (rpr == null) return null;
+            var c = rpr.GetFirstChild<Color>();
+            var val = c?.Val?.Value;
+            if (string.IsNullOrEmpty(val) || val.Equals("auto", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return val.TrimStart('#').ToUpperInvariant();
         }
 
         private static Level LevelOf(AbstractNum abs, int level) =>

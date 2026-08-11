@@ -29,6 +29,7 @@ namespace CustomLayoutGenerator
         public int? ListLevel { get; set; }            // 0 = سطح اول
         public string ListMarker { get; set; }         // "1." , "a)" , "•"
         public bool? ListMarkerBold { get; set; }      // 🐞 شماره‌ی لیست بولد است؟ (از rPr سطحِ numbering، نه رانِ متن)
+        public string ListMarkerColor { get; set; }    // 🐞 رنگِ شماره/بولتِ لیست (هگز بدونِ #، از rPr سطحِ numbering)
         // 🐞 BlankWord3: شماره‌ی لیست بیرونِ {blk} می‌ماند (دیده می‌شود) و فقط
         // متنِ بعد از شماره مخفی می‌شود — برخلافِ BlankWord2 که کلِ خط (شاملِ
         // شماره) را در یک بلاکِ مخفیِ ادغام‌شده می‌گذارد.
