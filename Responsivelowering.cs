@@ -53,16 +53,20 @@ namespace CustomLayoutGenerator
                     // 🌟 متنِ چندستونی: در صفحهٔ عریض همهٔ ستون‌ها کنارِ هم و
                     // داخلِ یک جدول‌اند که فقط بوردرِ بیرونی‌اش دیده می‌شود
                     // (BorderMode="outer" — خطوطِ داخلیِ بینِ ستون‌ها رسم
-                    // نمی‌شود)؛ در صفحهٔ باریک، همان استراتژیِ "stack" فعال
-                    // می‌شود و هر ستون به یک جدولِ تک‌ستونهٔ بوردردارِ مستقل
-                    // تبدیل می‌گردد. یعنی ترکیبی از رفتارِ OutsideTable
-                    // (عریض) و ColumnStackTable (باریک) — بدونِ نیاز به
-                    // مکانیزمِ تازه، فقط با کنارِ هم گذاشتنِ همان دو پرچمِ
-                    // موجود.
+                    // نمی‌شود).
+                    // 🐞 اصلاحِ برداشتِ قبلی (تصحیحِ کاربر) دربارهٔ صفحهٔ باریک:
+                    // ستون‌ها به چند جدولِ تک‌ستونهٔ *جدا* تبدیل نمی‌شوند؛ متنِ
+                    // همهٔ ستون‌ها به‌ترتیب به هم الحاق می‌شود و همگی داخلِ *یک*
+                    // جدولِ تک‌ستونهٔ بوردردار قرار می‌گیرند. برای همین
+                    // LayoutReflow به‌جای "stack" مقدارِ "merge" می‌گیرد؛
+                    // ResponsiveStrategy عمداً "stack" می‌ماند چون فلاتر با
+                    // همان تشخیص می‌دهد که در صفحهٔ باریک باید از مسیرِ عمودی
+                    // رد شود، و "merge" فقط تعیین می‌کند که نتیجهٔ آن مسیر یک
+                    // ستونِ یکپارچه باشد نه چند جعبهٔ مستقل.
                     span.ResponsiveStrategy = "stack";
                     span.Type = "layout";
                     span.LayoutDirection = "row";
-                    span.LayoutReflow = "stack";
+                    span.LayoutReflow = "merge";
                     span.Borders = span.Borders ?? new BorderDetail();
                     if (string.IsNullOrEmpty(span.Borders.Val)) span.Borders.Val = "single";
                     span.BorderMode = "outer";
