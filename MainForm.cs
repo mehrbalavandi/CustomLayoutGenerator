@@ -17,6 +17,7 @@ namespace CustomLayoutGenerator
         public MainForm()
         {
             InitializeComponent();
+            this.Icon = System.Drawing.Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         }
 
         private int _currentPage = 1;
