@@ -478,9 +478,11 @@ namespace CustomLayoutGenerator
                 if (firstTextSpan != null)
                 {
                     // 🌟 اصلاح شد: مارکرهای ساختاری متنی مثل b، i و u فیلتر می‌شوند تا به کل دکمه والد ارث نرسند
-                    blankParentSpan.Markers = firstTextSpan.Markers != null
-                        ? firstTextSpan.Markers.Where(m => m != "b" && m != "i" && m != "u").ToList()
-                        : new List<string>();
+                    // 🐞 مارکرهای جدیدِ s/sub/sup هم دقیقاً به همان دلیل باید فیلتر شوند:
+                    // قالب‌بندیِ واقعیِ هر تکه داخلِ InnerSpans نگه داشته می‌شود، پس اگر
+                    // اولین تکه بالانویس/خط‌خورده باشد نباید کلِ دکمه و کلِ متنِ مودال
+                    // بالانویس/خط‌خورده شود.
+                    blankParentSpan.Markers = StripRunFormatMarkers(firstTextSpan.Markers);
                     // 🌟 هر دو مقدار رنگ متن و رنگ پس‌زمینه را از دکمه والد می‌گیریم
                     blankParentSpan.FillColor = null;
                     blankParentSpan.TextColor = null;
@@ -583,10 +585,8 @@ namespace CustomLayoutGenerator
                 var firstTextSpan = blankParentSpan.InnerSpans.FirstOrDefault();
                 if (firstTextSpan != null)
                 {
-                    // مثلِ BlankWord2: مارکرهای ساختاریِ b/i/u به دکمه‌ی والد ارث نرسند.
-                    blankParentSpan.Markers = firstTextSpan.Markers != null
-                        ? firstTextSpan.Markers.Where(m => m != "b" && m != "i" && m != "u").ToList()
-                        : new List<string>();
+                    // مثلِ BlankWord2: مارکرهای ساختاریِ b/i/u/s/sub/sup به دکمه‌ی والد ارث نرسند.
+                    blankParentSpan.Markers = StripRunFormatMarkers(firstTextSpan.Markers);
                     blankParentSpan.FillColor = null;
                     blankParentSpan.TextColor = null;
                     blankParentSpan.Borders = null;
@@ -1594,6 +1594,11 @@ namespace CustomLayoutGenerator
                             combined += inner;
                         }
                         merged.Content = "{blk}" + combined + "{/blk}";
+                        // 🐞 والدِ ادغام‌شده نباید قالب‌بندیِ اجراییِ تکه‌ی اول را حمل کند؛
+                        // قالب‌بندیِ هر تکه در InnerSpans است. (پیش‌تر فقط برای
+                        // BlankWord2/3 رعایت می‌شد و این مسیرِ inline جا مانده بود —
+                        // با آمدنِ s/sub/sup خودش را به‌شکلِ «کلِ مودال بالانویس شد» نشان داد.)
+                        merged.Markers = StripRunFormatMarkers(merged.Markers);
                         result.Add(merged);
                     }
                     i = j;
@@ -1606,6 +1611,17 @@ namespace CustomLayoutGenerator
             }
             spans.Clear();
             spans.AddRange(result);
+        }
+
+        // 🐞 مارکرهای «قالب‌بندیِ اجرا» (run formatting) که نباید از تکه‌ی اولِ یک
+        // جای‌خالی به اسپنِ والد ارث برسند. مارکرهای غیرِقالبی مثل sz: و fn: و
+        // pindent: عمداً نگه داشته می‌شوند، چون اندازه/فونت/تورفتگیِ کلِ بلاک‌اند.
+        private static readonly string[] _runFormatMarkers = { "b", "i", "u", "s", "sub", "sup" };
+
+        private List<string> StripRunFormatMarkers(List<string> markers)
+        {
+            if (markers == null) return new List<string>();
+            return markers.Where(m => !_runFormatMarkers.Contains(m)).ToList();
         }
 
         private SpanData CloneSpan(SpanData source)
