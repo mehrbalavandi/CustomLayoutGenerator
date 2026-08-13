@@ -649,7 +649,18 @@ namespace CustomLayoutGenerator
 
                 var justification = p.ParagraphProperties.Justification;
                 if (justification?.Val != null)
+                {
                     basePara.Alignment = MapAlignment(justification.Val.Value);
+                }
+                else
+                {
+                    // 🐞 تا حالا هم‌ترازی فقط وقتی خوانده می‌شد که خودِ پاراگراف
+                    // w:jc مستقیم داشته باشد. در ورد اغلب هم‌ترازی از *استایلِ*
+                    // پاراگراف (یا استایلِ پدرش، یا docDefaults) می‌آید — در آن
+                    // حالت Alignment خالی می‌ماند و فلاتر چپ‌چین رندر می‌کرد.
+                    basePara.Alignment = GetAlignmentFromStyleId(
+                        mainPart, p.ParagraphProperties.ParagraphStyleId?.Val?.Value);
+                }
 
                 // 🌟 استخراج دقیق تورفتگی‌های پاراگراف (Indentation)
                 if (p.ParagraphProperties.Indentation != null)
@@ -1495,10 +1506,16 @@ namespace CustomLayoutGenerator
         {
             if (v == JustificationValues.Center) return "C";
             if (v == JustificationValues.Right) return "R";
-            if (v == JustificationValues.End) return "R";          // انتهای خط (RTL-relative)
+            if (v == JustificationValues.Left) return "L";
+            // 🐞 start/end در ورد «نسبت به جهتِ پاراگراف» هستند، نه چپ/راستِ
+            // مطلق: در یک پاراگرافِ RTL، end یعنی چپ. قبلاً End به "R" نگاشت
+            // می‌شد و در پاراگراف‌های فارسی برعکس رندر می‌شد. حالا جدا
+            // فرستاده می‌شوند تا فلاتر با TextAlign.start/end تصمیم بگیرد.
+            if (v == JustificationValues.Start) return "S";
+            if (v == JustificationValues.End) return "E";
             if (v == JustificationValues.Both) return "J";         // justify
             if (v == JustificationValues.Distribute) return "J";
-            return "L";                                            // Left / Start / پیش‌فرض
+            return "L";                                            // پیش‌فرض
         }
 
         // 🌟 کشِ NumberingResolver که با تغییرِ سند (mainPart) خودکار ری‌ست می‌شود
@@ -1674,6 +1691,39 @@ namespace CustomLayoutGenerator
                 if (string.IsNullOrEmpty(basedOn)) break;
                 style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
             }
+            return null;
+        }
+
+        /// <summary>
+        /// هم‌ترازیِ افقی را از زنجیره‌ی استایلِ پاراگراف پیدا می‌کند: خودِ
+        /// استایل، بعد BasedOnهایش، و در آخر docDefaults. اگر هیچ‌کدام
+        /// هم‌ترازی تعریف نکرده باشند null برمی‌گردد (یعنی «پیش‌فرضِ جهتِ
+        /// پاراگراف»، که فلاتر با TextAlign.start رندر می‌کند).
+        /// </summary>
+        private string GetAlignmentFromStyleId(MainDocumentPart mainPart, string styleId)
+        {
+            var styles = mainPart?.StyleDefinitionsPart?.Styles;
+            if (styles == null) return null;
+
+            if (!string.IsNullOrEmpty(styleId))
+            {
+                var style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId == styleId);
+                int guard = 0;
+                while (style != null && guard++ < 20)   // گاردِ حلقه‌ی BasedOnِ چرخه‌ای
+                {
+                    var jc = style.StyleParagraphProperties?.Justification?.Val;
+                    if (jc != null) return MapAlignment(jc.Value);
+
+                    var basedOn = style.BasedOn?.Val?.Value;
+                    if (string.IsNullOrEmpty(basedOn)) break;
+                    style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
+                }
+            }
+
+            var defJc = styles.DocDefaults?.ParagraphPropertiesDefault?
+                              .ParagraphPropertiesBaseStyle?.Justification?.Val;
+            if (defJc != null) return MapAlignment(defJc.Value);
+
             return null;
         }
 
@@ -2187,8 +2237,11 @@ namespace CustomLayoutGenerator
                 }
             }
 
-            var alignment = tblPr.TableJustification?.Val?.Value.ToString();
-            if (!string.IsNullOrEmpty(alignment)) props.Add("alignment", alignment.ToLower());
+            // 🐞 همان گیر برای هم‌ترازیِ افقیِ خودِ جدول — به همین دلیل شرطِ
+            // tableAlignment=="center"/"right" در فلاتر هرگز برقرار نمی‌شد و
+            // هر جدولی چپ‌چین می‌ماند.
+            var alignment = tblPr.TableJustification?.Val?.InnerText;
+            if (!string.IsNullOrEmpty(alignment)) props.Add("alignment", alignment.ToLowerInvariant());
 
             var shading = tblPr.Shading?.Fill?.Value;
             if (!string.IsNullOrEmpty(shading) && shading != "auto") props.Add("shading", shading);
@@ -2324,13 +2377,21 @@ namespace CustomLayoutGenerator
             var shading = tcPr.Shading?.Fill?.Value;
             if (!string.IsNullOrEmpty(shading) && shading != "auto") props.Add("shading", shading);
 
-            var vAlign = tcPr.TableCellVerticalAlignment?.Val?.Value.ToString();
-            if (!string.IsNullOrEmpty(vAlign)) props.Add("vAlign", vAlign.ToLower());
+            // 🐞 ریشه‌ی «هم‌ترازیِ عمودیِ سلول‌ها همیشه بالا بود»: دقیقاً همان
+            // گیرِ آشنایِ این نسخه‌ی OpenXML — TableVerticalAlignmentValues یک
+            // struct است و ‎.Val.Value.ToString()‎ رشته‌ی بی‌معنیِ
+            // "tableverticalalignmentvalues { }" می‌داد، نه "center"/"bottom".
+            // پس شرطِ فلاتر (vAlign=="center") هیچ‌وقت درست نمی‌شد و همه‌ی
+            // سلول‌ها top رندر می‌شدند. InnerText مقدارِ خامِ XML را می‌دهد.
+            var vAlign = tcPr.TableCellVerticalAlignment?.Val?.InnerText;
+            if (!string.IsNullOrEmpty(vAlign)) props.Add("vAlign", vAlign.ToLowerInvariant());
 
             var gridSpan = tcPr.GridSpan?.Val?.Value;
             if (gridSpan != null && gridSpan > 1) props.Add("colSpan", gridSpan.ToString());
 
-            var vMergeVal = tcPr.VerticalMerge?.Val?.Value.ToString();
+            // همان گیر؛ rowMerge فعلاً سمتِ فلاتر مصرف نمی‌شود ولی داده‌اش
+            // نباید غلط ذخیره شود.
+            var vMergeVal = tcPr.VerticalMerge?.Val?.InnerText;
             var vMerge = vMergeVal ?? (tcPr.VerticalMerge != null ? "continue" : null);
 
             if (!string.IsNullOrEmpty(vMerge)) props.Add("rowMerge", vMerge.ToLower());
