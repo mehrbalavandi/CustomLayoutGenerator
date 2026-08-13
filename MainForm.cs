@@ -55,6 +55,67 @@ namespace CustomLayoutGenerator
             _blankWord3Set.Clear();
         }
 
+        /// آخرین شماره‌ای که کاربر تأیید کرده — فقط برای پیش‌فرضِ دفعه‌ی بعد در
+        /// همین اجرا (استخراجِ چند جلدِ پشتِ‌هم را راحت‌تر می‌کند).
+        private int _lastStartPageNumber = 1;
+
+        /// <summary>
+        /// شماره‌ی صفحه‌ی اولین صفحه‌ی تولیدشده را می‌پرسد.
+        /// خروجی null یعنی کاربر انصراف داد و کلِ عملیات باید لغو شود.
+        /// </summary>
+        /// <remarks>
+        /// عمداً یک فرمِ کوچکِ دستی است و نه Microsoft.VisualBasic.Interaction.InputBox:
+        /// آن یکی به یک اسمبلیِ اضافه وابسته است و ورودیِ متنی می‌دهد که باید
+        /// دستی اعتبارسنجی شود. NumericUpDown از اساس اجازه‌ی ورودیِ نامعتبر
+        /// نمی‌دهد و راست‌به‌چپ هم درست نمایش داده می‌شود.
+        /// </remarks>
+        private static int? PromptForStartPage(int defaultValue)
+        {
+            using (var dialog = new Form())
+            using (var label = new Label())
+            using (var input = new NumericUpDown())
+            using (var okButton = new Button())
+            using (var cancelButton = new Button())
+            {
+                dialog.Text = "شماره‌ی صفحه‌ی شروع";
+                dialog.RightToLeft = RightToLeft.Yes;
+                dialog.RightToLeftLayout = true;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+                dialog.ShowInTaskbar = false;
+                dialog.ClientSize = new System.Drawing.Size(360, 130);
+
+                label.Text = "اولین صفحه‌ی این سند، در کتابِ چاپی چه شماره‌ای دارد؟";
+                label.AutoSize = false;
+                label.SetBounds(16, 16, 328, 24);
+
+                input.Minimum = 0;
+                input.Maximum = 100000;
+                input.Value = Math.Min(Math.Max(defaultValue, 0), 100000);
+                input.SetBounds(16, 48, 100, 26);
+                input.TextAlign = HorizontalAlignment.Center;
+
+                okButton.Text = "تأیید";
+                okButton.DialogResult = DialogResult.OK;
+                okButton.SetBounds(196, 88, 70, 28);
+
+                cancelButton.Text = "انصراف";
+                cancelButton.DialogResult = DialogResult.Cancel;
+                cancelButton.SetBounds(274, 88, 70, 28);
+
+                dialog.Controls.AddRange(new System.Windows.Forms.Control[] { label, input, okButton, cancelButton });
+                dialog.AcceptButton = okButton;   // Enter = تأیید
+                dialog.CancelButton = cancelButton; // Esc = انصراف
+
+                // 🐞 بستنِ پنجره با ضربدر هم باید «انصراف» حساب شود، نه تأیید
+                // با مقدارِ پیش‌فرض — وگرنه کاربر ناخواسته با شماره‌ی اشتباه
+                // استخراج می‌کند.
+                return dialog.ShowDialog() == DialogResult.OK ? (int)input.Value : (int?)null;
+            }
+        }
+
         private void btnSelectFile_Click(object sender, EventArgs e)
         {
             using (OpenFileDialog openFileDialog = new OpenFileDialog())
@@ -65,6 +126,13 @@ namespace CustomLayoutGenerator
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
                 {
                     string originalFile = openFileDialog.FileName;
+
+                    // 🌟 شماره‌ی صفحه‌ی شروع را از کاربر بپرس. عمداً *قبل* از
+                    // ساختِ فایلِ موقت و هر کارِ دیگری پرسیده می‌شود تا اگر
+                    // انصراف داد، هیچ فایلِ موقتی ساخته و رها نشود.
+                    int? startPage = PromptForStartPage(_lastStartPageNumber);
+                    if (startPage == null) return;   // کاربر انصراف داد
+                    _lastStartPageNumber = startPage.Value;
 
                     // ساخت فایل موقت
                     string tempFile = Path.Combine(
@@ -81,7 +149,7 @@ namespace CustomLayoutGenerator
                         ResetCounters();
 
                         // ۱. پردازش کتاب اصلی
-                        List<PageData> pages = ProcessWordDocument(tempFile, outputDir);
+                        List<PageData> pages = ProcessWordDocument(tempFile, outputDir, startPage.Value);
 
                         // ادغام پاراگراف‌های BlankWord2 برای کتاب اصلی
                         foreach (var page in pages)
@@ -126,7 +194,8 @@ namespace CustomLayoutGenerator
                         BookOutputWriter.Write(outputDir, pages, audioScripts);
 
                         MessageBox.Show(
-                            $"کتاب با موفقیت به {pages.Count} فایلِ صفحه + index.json تبدیل شد!",
+                            $"کتاب با موفقیت به {pages.Count} فایلِ صفحه + index.json تبدیل شد!\n" +
+                            $"شماره‌ی صفحات: {startPage.Value} تا {startPage.Value + pages.Count - 1}",
                             "عملیات موفق", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     finally
@@ -141,12 +210,12 @@ namespace CustomLayoutGenerator
             }
         }
 
-        private List<PageData> ProcessWordDocument(string filePath, string outputDir)
+        private List<PageData> ProcessWordDocument(string filePath, string outputDir, int startPageNumber)
         {
             using var wordDocument = WordprocessingDocument.Open(filePath, false);
             var resolver = new FontResolver(wordDocument);
             List<PageData> pages = new List<PageData>();
-            PageData currentPage = new PageData { PageNumber = 1 };
+            PageData currentPage = new PageData { PageNumber = startPageNumber };
             pages.Add(currentPage);
 
             using (WordprocessingDocument wordDoc = WordprocessingDocument.Open(filePath, false))
@@ -157,7 +226,10 @@ namespace CustomLayoutGenerator
                 {
                     if (element.Descendants<Break>().Any(b => b.Type != null && b.Type.Value == BreakValues.Page))
                     {
-                        currentPage = new PageData { PageNumber = pages.Count + 1 };
+                        // pages.Count تعدادِ صفحاتِ *قبلاً افزوده‌شده* است، پس این
+                        // فرمول همان دنباله‌ی قبلی را می‌دهد وقتی شروع ۱ باشد
+                        // (۱+۱=۲، ...) و با هر شروعِ دیگری هم درست ادامه می‌دهد.
+                        currentPage = new PageData { PageNumber = startPageNumber + pages.Count };
                         pages.Add(currentPage);
                         continue;
                     }
