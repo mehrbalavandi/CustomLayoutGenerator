@@ -559,6 +559,11 @@ namespace CustomLayoutGenerator
                     // 🌟 هر دو مقدار رنگ متن و رنگ پس‌زمینه را از دکمه والد می‌گیریم
                     blankParentSpan.FillColor = null;
                     blankParentSpan.TextColor = null;
+                    // مثلِ TextColor: مارکرِ "u" از والد strip می‌شود، پس
+                    // جزئیاتِ زیرخط هم نباید روی والد بماند.
+                    blankParentSpan.UnderlineStyle = null;
+                    blankParentSpan.UnderlineThickness = null;
+                    blankParentSpan.UnderlineColor = null;
                     // 🌟 مسدود کردن ارث‌بری بوردر برای دکمه اصلی
                     //blankParentSpan.HasBorders = null;
                     blankParentSpan.Borders = null;
@@ -662,6 +667,11 @@ namespace CustomLayoutGenerator
                     blankParentSpan.Markers = StripRunFormatMarkers(firstTextSpan.Markers);
                     blankParentSpan.FillColor = null;
                     blankParentSpan.TextColor = null;
+                    // مثلِ TextColor: مارکرِ "u" از والد strip می‌شود، پس
+                    // جزئیاتِ زیرخط هم نباید روی والد بماند.
+                    blankParentSpan.UnderlineStyle = null;
+                    blankParentSpan.UnderlineThickness = null;
+                    blankParentSpan.UnderlineColor = null;
                     blankParentSpan.Borders = null;
                 }
 
@@ -1141,6 +1151,17 @@ namespace CustomLayoutGenerator
                 if (string.IsNullOrEmpty(runTextColor) && pStyleId != null) runTextColor = GetColorFromStyleId(mainPart, pStyleId);
             }
 
+            // 🌟 جزئیاتِ زیرخط (نوع/ضخامت/رنگ). مارکرِ "u" جدا و مثلِ قبل در
+            // ExtractRunMarkers تولید می‌شود؛ این‌جا فقط «چه‌جور زیرخطی» را
+            // مشخص می‌کنیم. دامنه عمداً همان دامنه‌ی مارکر است (فقط rPrِ
+            // مستقیمِ ران، نه زنجیره‌ی استایل) تا مجموعه‌ی رانْ‌های زیرخط‌دار
+            // دقیقاً همان قبلی بماند و این تغییر فقط ظاهرِ زیرخط را عوض کند.
+            string runUnderlineStyle = null;
+            double? runUnderlineThickness = null;
+            string runUnderlineColor = null;
+            MapUnderline(run.RunProperties?.Underline,
+                         out runUnderlineStyle, out runUnderlineThickness, out runUnderlineColor);
+
             // 🌟 اصلاح مهم: کادر متنی (Character Border) فقط باید از خود کلمه یا استایلِ مستقیمِ کلمه خوانده شود. 
             // ارث‌بری از استایل پاراگراف (pStyleId) حذف شد تا کادر به تمام کلمات نشت نکند!
             Border rBorder = run.RunProperties?.Border;
@@ -1198,6 +1219,12 @@ namespace CustomLayoutGenerator
 
                 if (!string.IsNullOrEmpty(runShading)) newTextSpan.FillColor = runShading;
                 if (!string.IsNullOrEmpty(runTextColor)) newTextSpan.TextColor = runTextColor;
+                if (!string.IsNullOrEmpty(runUnderlineStyle))
+                {
+                    newTextSpan.UnderlineStyle = runUnderlineStyle;
+                    newTextSpan.UnderlineThickness = runUnderlineThickness;
+                    newTextSpan.UnderlineColor = runUnderlineColor;
+                }
                 if (runBorder != null) newTextSpan.Borders = runBorder; // تزریق مستقیم شیء مشترک بوردر
 
                 paraData.Spans.Add(newTextSpan);
@@ -1714,6 +1741,53 @@ namespace CustomLayoutGenerator
             return markers.Where(m => !_runFormatMarkers.Contains(m)).ToList();
         }
 
+        /// <summary>
+        /// نگاشتِ w:u وردْ به واژگانِ زیرخطِ فلاتر.
+        /// ورد ~۱۷ مقدار برای w:val دارد، فلاتر فقط ۵ سبک
+        /// (solid/double/dotted/dashed/wavy) به‌علاوه‌ی یک ضریبِ ضخامت.
+        /// حالت‌های Heavy/thick به ضخامتِ ۲ نگاشت می‌شوند، و dotDash/dotDotDash
+        /// (که فلاتر معادلی برایشان ندارد) به نزدیک‌ترین گزینه یعنی dashed.
+        /// </summary>
+        private static void MapUnderline(Underline u, out string style, out double? thickness, out string color)
+        {
+            style = null; thickness = null; color = null;
+            if (u == null) return;
+
+            // InnerText و نه .Value.ToString() — همان درسِ BorderValues:
+            // این enumها در این نسخه‌ی SDK درست stringify نمی‌شوند.
+            // نبودِ w:val در وردْ یعنی single.
+            string val = (u.Val?.InnerText ?? "single").Trim().ToLowerInvariant();
+            if (val == "none" || val == "") return;
+
+            switch (val)
+            {
+                case "double": style = "double"; thickness = 1.0; break;
+                case "thick": style = "solid"; thickness = 2.0; break;
+
+                case "dotted": style = "dotted"; thickness = 1.0; break;
+                case "dottedheavy": style = "dotted"; thickness = 2.0; break;
+
+                case "dash":
+                case "dashlong":
+                case "dotdash":
+                case "dotdotdash": style = "dashed"; thickness = 1.0; break;
+                case "dashedheavy":
+                case "dashlongheavy":
+                case "dashdotheavy":
+                case "dashdotdotheavy": style = "dashed"; thickness = 2.0; break;
+
+                case "wave":
+                case "wavydouble": style = "wavy"; thickness = 1.0; break;
+                case "wavyheavy": style = "wavy"; thickness = 2.0; break;
+
+                // single و words (و هر مقدارِ ناشناخته‌ی آینده) → زیرخطِ ساده
+                default: style = "solid"; thickness = 1.0; break;
+            }
+
+            var c = u.Color?.Value;
+            if (!string.IsNullOrEmpty(c) && c != "auto") color = c;
+        }
+
         private SpanData CloneSpan(SpanData source)
         {
             return new SpanData
@@ -1728,6 +1802,9 @@ namespace CustomLayoutGenerator
 
                 FillColor = source.FillColor,
                 TextColor = source.TextColor,
+                UnderlineStyle = source.UnderlineStyle,
+                UnderlineThickness = source.UnderlineThickness,
+                UnderlineColor = source.UnderlineColor,
                 Borders = source.Borders != null ? new BorderDetail { Val = source.Borders.Val, Width = source.Borders.Width, Color = source.Borders.Color } : null,
                 FloatPosition = source.FloatPosition,
                 TableStyleName = source.TableStyleName,

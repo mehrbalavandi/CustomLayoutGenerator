@@ -88,6 +88,17 @@ namespace CustomLayoutGenerator
         public string FillColor { get; set; }
         public string TextColor { get; set; }
 
+        // 🌟 جزئیاتِ زیرخط. مارکرِ "u" فقط می‌گوید «زیرخط دارد»؛ این سه فیلد
+        // می‌گویند چه‌جور زیرخطی. نگاشتِ ~۱۷ مقدارِ w:u/@w:val وردْ همین‌جا
+        // (سمتِ سی‌شارپ) به واژگانِ کوچکِ فلاتر انجام می‌شود، نه در دارت —
+        // تا فقط یک جا لازم باشد نگهداری شود.
+        // UnderlineStyle: "solid" | "double" | "dotted" | "dashed" | "wavy"
+        // UnderlineThickness: ضریبِ ضخامت (۱ عادی، ۲ برای حالت‌های Heavy/thick)
+        // UnderlineColor: هگزِ بدون #؛ null یعنی همرنگِ متن
+        public string UnderlineStyle { get; set; }
+        public double? UnderlineThickness { get; set; }
+        public string UnderlineColor { get; set; }
+
         // 🌟 ارتقاء: اضافه شدن کلاس مشترک بوردر در سطح متن (Span)
         public BorderDetail Borders { get; set; }
 
