@@ -95,6 +95,9 @@ namespace CustomLayoutGenerator
         // UnderlineStyle: "solid" | "double" | "dotted" | "dashed" | "wavy"
         // UnderlineThickness: ضریبِ ضخامت (۱ عادی، ۲ برای حالت‌های Heavy/thick)
         // UnderlineColor: هگزِ بدون #؛ null یعنی همرنگِ متن
+        // 🌟 فاصله‌ی بینِ حروف (w:spacing داخلِ rPr)، به پوینت. null یعنی عادی.
+        public double? LetterSpacing { get; set; }
+
         public string UnderlineStyle { get; set; }
         public double? UnderlineThickness { get; set; }
         public string UnderlineColor { get; set; }

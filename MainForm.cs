@@ -1138,8 +1138,33 @@ namespace CustomLayoutGenerator
             }
 
             List<string> currentMarkers = ExtractRunMarkers(run, pPr, mainPart, conditionalBold);
-            string runShading = run.RunProperties?.Shading?.Fill?.Value;
-            if (runShading == "auto") runShading = null;
+
+            // 🌟 پس‌زمینه‌ی متن دو منبعِ کاملاً جدا در ورد دارد و تا حالا فقط
+            // یکی‌اش خوانده می‌شد: w:shd (شیدینگ) خوانده می‌شد، ولی
+            // w:highlight (قلمِ هایلایتِ نوارِ ابزار — همان که کاربر روی متن
+            // می‌کشد) اصلاً. در ورد هایلایت رویِ شیدینگ کشیده می‌شود، پس
+            // اولویت با آن است. هر دو حالا زنجیره‌ی استایل را هم می‌بینند.
+            var resolvedHighlight = ResolveRunProp(run.RunProperties, runStyleId, pStyleId, mainPart,
+                                                   r => r.Highlight, sr => sr.Highlight);
+            string runShading = MapHighlight(resolvedHighlight?.Val?.InnerText);
+
+            if (string.IsNullOrEmpty(runShading))
+            {
+                var resolvedShading = ResolveRunProp(run.RunProperties, runStyleId, pStyleId, mainPart,
+                                                     r => r.Shading, sr => sr.Shading);
+                runShading = resolvedShading?.Fill?.Value;
+                if (runShading == "auto") runShading = null;
+            }
+
+            // 🌟 فاصله‌ی بینِ حروف (w:spacing داخلِ rPr) — تا حالا خوانده
+            // نمی‌شد. مقدارش در ورد بیستم‌های پوینت است، پس ÷۲۰ می‌شود پوینت
+            // و مثلِ بقیه‌ی اندازه‌ها ۱pt=۱px به فلاتر داده می‌شود. صفر یعنی
+            // «عادی» و اصلاً فرستاده نمی‌شود تا JSON بی‌جهت بزرگ نشود.
+            double? runLetterSpacing = null;
+            var resolvedCharSpacing = ResolveRunProp(run.RunProperties, runStyleId, pStyleId, mainPart,
+                                                     r => r.Spacing, sr => sr.Spacing);
+            if (resolvedCharSpacing?.Val?.Value != null && resolvedCharSpacing.Val.Value != 0)
+                runLetterSpacing = resolvedCharSpacing.Val.Value / 20.0;
 
             string runTextColor = null;
             if (run.RunProperties?.Color?.Val?.Value != null && run.RunProperties.Color.Val.Value != "auto")
@@ -1159,7 +1184,8 @@ namespace CustomLayoutGenerator
             string runUnderlineStyle = null;
             double? runUnderlineThickness = null;
             string runUnderlineColor = null;
-            MapUnderline(run.RunProperties?.Underline,
+            MapUnderline(ResolveRunProp(run.RunProperties, runStyleId, pStyleId, mainPart,
+                                        r => r.Underline, sr => sr.Underline),
                          out runUnderlineStyle, out runUnderlineThickness, out runUnderlineColor);
 
             // 🌟 اصلاح مهم: کادر متنی (Character Border) فقط باید از خود کلمه یا استایلِ مستقیمِ کلمه خوانده شود. 
@@ -1225,6 +1251,7 @@ namespace CustomLayoutGenerator
                     newTextSpan.UnderlineThickness = runUnderlineThickness;
                     newTextSpan.UnderlineColor = runUnderlineColor;
                 }
+                if (runLetterSpacing != null) newTextSpan.LetterSpacing = runLetterSpacing;
                 if (runBorder != null) newTextSpan.Borders = runBorder; // تزریق مستقیم شیء مشترک بوردر
 
                 paraData.Spans.Add(newTextSpan);
@@ -1805,6 +1832,7 @@ namespace CustomLayoutGenerator
                 UnderlineStyle = source.UnderlineStyle,
                 UnderlineThickness = source.UnderlineThickness,
                 UnderlineColor = source.UnderlineColor,
+                LetterSpacing = source.LetterSpacing,
                 Borders = source.Borders != null ? new BorderDetail { Val = source.Borders.Val, Width = source.Borders.Width, Color = source.Borders.Color } : null,
                 FloatPosition = source.FloatPosition,
                 TableStyleName = source.TableStyleName,
@@ -2119,6 +2147,84 @@ namespace CustomLayoutGenerator
             return null;
         }
 
+        /// <summary>
+        /// rPrِ هر استایل در زنجیره‌ی basedOn را به‌ترتیب برمی‌گرداند.
+        /// 🌟 چرا لازم شد: تا حالا فقط Bold/Italic/FontSize/Color/Caps زنجیره‌ی
+        /// استایل را دنبال می‌کردند و بقیه (زیرخط، خط‌خورده، بالا/زیرنویس،
+        /// هایلایت، شیدینگ) فقط rPrِ *مستقیمِ* ران را می‌دیدند. یعنی اگر
+        /// قالب‌بندی از یک «استایلِ کاراکتری» می‌آمد — که در ورد کاملاً عادی
+        /// است — بی‌صدا نادیده گرفته می‌شد. همان جنسِ خلائی که در هم‌ترازیِ
+        /// پاراگراف هم داشتیم.
+        /// </summary>
+        private IEnumerable<StyleRunProperties> StyleRunPropsChain(MainDocumentPart mainPart, string styleId)
+        {
+            var styles = mainPart?.StyleDefinitionsPart?.Styles;
+            if (styles == null || string.IsNullOrEmpty(styleId)) yield break;
+
+            var style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId == styleId);
+            int guard = 0;
+            while (style != null && guard++ < 20)   // گاردِ زنجیره‌ی چرخه‌ای
+            {
+                if (style.StyleRunProperties != null) yield return style.StyleRunProperties;
+
+                var basedOn = style.BasedOn?.Val?.Value;
+                if (string.IsNullOrEmpty(basedOn)) break;
+                style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
+            }
+        }
+
+        /// اول rPrِ مستقیمِ ران، بعد زنجیره‌ی استایلِ کاراکتری، بعد زنجیره‌ی
+        /// استایلِ پاراگراف — همان ترتیبی که خودِ ورد اعمال می‌کند.
+        private T ResolveRunProp<T>(
+            RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart,
+            Func<RunProperties, T> direct, Func<StyleRunProperties, T> fromStyle) where T : class
+        {
+            var v = rPr == null ? null : direct(rPr);
+            if (v != null) return v;
+
+            foreach (var srp in StyleRunPropsChain(mainPart, runStyleId))
+            {
+                v = fromStyle(srp);
+                if (v != null) return v;
+            }
+            foreach (var srp in StyleRunPropsChain(mainPart, pStyleId))
+            {
+                v = fromStyle(srp);
+                if (v != null) return v;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// قلمِ هایلایتِ ورد (w:highlight) — که با شیدینگ (w:shd) فرق دارد و
+        /// تا حالا اصلاً خوانده نمی‌شد. پالتِ ثابتِ ۱۶رنگیِ ورد است، پس نگاشتش
+        /// همین‌جا سخت‌کدشده. خروجی هگزِ بدونِ #، یا null برای none.
+        /// </summary>
+        private static string MapHighlight(string val)
+        {
+            if (string.IsNullOrEmpty(val)) return null;
+            switch (val.Trim().ToLowerInvariant())
+            {
+                case "yellow": return "FFFF00";
+                case "green": return "00FF00";
+                case "cyan": return "00FFFF";
+                case "magenta": return "FF00FF";
+                case "blue": return "0000FF";
+                case "red": return "FF0000";
+                case "darkblue": return "000080";
+                case "darkcyan": return "008080";
+                case "darkgreen": return "008000";
+                case "darkmagenta": return "800080";
+                case "darkred": return "800000";
+                case "darkyellow": return "808000";
+                case "darkgray": return "808080";
+                case "lightgray": return "C0C0C0";
+                case "black": return "000000";
+                case "white": return "FFFFFF";
+                default: return null;   // "none" و هر مقدارِ ناشناخته
+            }
+        }
+
         private List<string> ExtractRunMarkers(Run run, ParagraphProperties pPr, MainDocumentPart mainPart, bool conditionalBold = false)
         {
             var markers = new List<string>();
@@ -2165,22 +2271,41 @@ namespace CustomLayoutGenerator
             else if (conditionalBold && rPr?.Bold == null) markers.Add("b");
             if (IsItalic(rPr, runStyleId, pStyleId, mainPart, preferCsItalic)) markers.Add("i");
 
-            if (rPr?.Underline != null)
+            // 🌟 حالا از زنجیره‌ی استایل هم خوانده می‌شود، نه فقط rPrِ مستقیم.
+            // InnerText به‌جای .Value.ToString() — همان گیرِ همیشگیِ این SDK.
+            var resolvedUnderline = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
+                                                   r => r.Underline, sr => sr.Underline);
+            if (resolvedUnderline != null)
             {
-                var uVal = rPr.Underline.Val?.Value ?? UnderlineValues.Single;
-                if (uVal != UnderlineValues.None) markers.Add("u");
+                var uVal = (resolvedUnderline.Val?.InnerText ?? "single").Trim().ToLowerInvariant();
+                if (uVal != "none" && uVal != "") markers.Add("u");
             }
 
             // 🐞 خط‌خورده (strikethrough): Word دو حالت دارد — <w:strike/> ساده و
             // <w:dstrike/> دوخط. هر دو را به یک مارکرِ "s" نگاشت می‌کنیم (فلاتر
             // فقط lineThrough دارد). w:val="0" یعنی صراحتاً خاموش.
-            bool _strike = (rPr?.Strike != null && (rPr.Strike.Val == null || rPr.Strike.Val.Value)) ||
-                           (rPr?.DoubleStrike != null && (rPr.DoubleStrike.Val == null || rPr.DoubleStrike.Val.Value));
+            var resolvedStrike = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
+                                                r => r.Strike, sr => sr.Strike);
+            var resolvedDStrike = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
+                                                 r => r.DoubleStrike, sr => sr.DoubleStrike);
+            bool _strike = (resolvedStrike != null && (resolvedStrike.Val == null || resolvedStrike.Val.Value)) ||
+                           (resolvedDStrike != null && (resolvedDStrike.Val == null || resolvedDStrike.Val.Value));
             if (_strike) markers.Add("s");
+
+            // 🌟 حروفِ کوچکِ بزرگ‌نما (w:smallCaps) — تا حالا اصلاً خوانده
+            // نمی‌شد. در فلاتر معادلِ مستقیم ندارد و با فیچرِ OpenType 'smcp'
+            // تقریب زده می‌شود؛ اگر فونت آن را نداشته باشد بی‌اثر است، نه
+            // خراب‌کننده. (w:caps جداست و از قبل با ToUpper اعمال می‌شد.)
+            var resolvedSmallCaps = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
+                                                   r => r.SmallCaps, sr => sr.SmallCaps);
+            if (resolvedSmallCaps != null &&
+                (resolvedSmallCaps.Val == null || resolvedSmallCaps.Val.Value)) markers.Add("smallcaps");
 
             // 🐞 بالانویس/زیرنویس: در OOXML از <w:vertAlign w:val="superscript|subscript"/>
             // می‌آید. مقدارِ "baseline" یعنی عادی و مارکری تولید نمی‌کند.
-            var _vAlign = rPr?.VerticalTextAlignment?.Val;
+            var _vAlign = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
+                                         r => r.VerticalTextAlignment,
+                                         sr => sr.VerticalTextAlignment)?.Val;
             if (_vAlign != null)
             {
                 // InnerText به‌جای .Value.ToString() — همان درسِ BorderValues:
