@@ -1144,14 +1144,14 @@ namespace CustomLayoutGenerator
             // w:highlight (قلمِ هایلایتِ نوارِ ابزار — همان که کاربر روی متن
             // می‌کشد) اصلاً. در ورد هایلایت رویِ شیدینگ کشیده می‌شود، پس
             // اولویت با آن است. هر دو حالا زنجیره‌ی استایل را هم می‌بینند.
-            var resolvedHighlight = ResolveRunProp(run.RunProperties, runStyleId, pStyleId, mainPart,
-                                                   r => r.Highlight, sr => sr.Highlight);
+            var resolvedHighlight = ResolveRunProp<Highlight>(
+                run.RunProperties, runStyleId, pStyleId, mainPart);
             string runShading = MapHighlight(resolvedHighlight?.Val?.InnerText);
 
             if (string.IsNullOrEmpty(runShading))
             {
-                var resolvedShading = ResolveRunProp(run.RunProperties, runStyleId, pStyleId, mainPart,
-                                                     r => r.Shading, sr => sr.Shading);
+                var resolvedShading = ResolveRunProp<Shading>(
+                    run.RunProperties, runStyleId, pStyleId, mainPart);
                 runShading = resolvedShading?.Fill?.Value;
                 if (runShading == "auto") runShading = null;
             }
@@ -1161,8 +1161,10 @@ namespace CustomLayoutGenerator
             // و مثلِ بقیه‌ی اندازه‌ها ۱pt=۱px به فلاتر داده می‌شود. صفر یعنی
             // «عادی» و اصلاً فرستاده نمی‌شود تا JSON بی‌جهت بزرگ نشود.
             double? runLetterSpacing = null;
-            var resolvedCharSpacing = ResolveRunProp(run.RunProperties, runStyleId, pStyleId, mainPart,
-                                                     r => r.Spacing, sr => sr.Spacing);
+            // نکته: در rPr کلاسِ w:spacing همان Spacing است (فاصله‌ی حروف)؛
+            // SpacingBetweenLines مالِ pPr است و ربطی به این‌جا ندارد.
+            var resolvedCharSpacing = ResolveRunProp<Spacing>(
+                run.RunProperties, runStyleId, pStyleId, mainPart);
             if (resolvedCharSpacing?.Val?.Value != null && resolvedCharSpacing.Val.Value != 0)
                 runLetterSpacing = resolvedCharSpacing.Val.Value / 20.0;
 
@@ -1184,9 +1186,9 @@ namespace CustomLayoutGenerator
             string runUnderlineStyle = null;
             double? runUnderlineThickness = null;
             string runUnderlineColor = null;
-            MapUnderline(ResolveRunProp(run.RunProperties, runStyleId, pStyleId, mainPart,
-                                        r => r.Underline, sr => sr.Underline),
-                         out runUnderlineStyle, out runUnderlineThickness, out runUnderlineColor);
+            MapUnderline(
+                ResolveRunProp<Underline>(run.RunProperties, runStyleId, pStyleId, mainPart),
+                out runUnderlineStyle, out runUnderlineThickness, out runUnderlineColor);
 
             // 🌟 اصلاح مهم: کادر متنی (Character Border) فقط باید از خود کلمه یا استایلِ مستقیمِ کلمه خوانده شود. 
             // ارث‌بری از استایل پاراگراف (pStyleId) حذف شد تا کادر به تمام کلمات نشت نکند!
@@ -2175,21 +2177,31 @@ namespace CustomLayoutGenerator
 
         /// اول rPrِ مستقیمِ ران، بعد زنجیره‌ی استایلِ کاراکتری، بعد زنجیره‌ی
         /// استایلِ پاراگراف — همان ترتیبی که خودِ ورد اعمال می‌کند.
+        /// 🐞 نسخه‌ی اولِ این متد دو selector می‌گرفت
+        /// (‎Func&lt;RunProperties,T&gt;‎ و ‎Func&lt;StyleRunProperties,T&gt;‎) و کامپایل
+        /// نشد: برخلافِ RunProperties، کلاسِ StyleRunProperties برای همه‌ی
+        /// فرزندانش پراپرتیِ نوع‌دار ندارد — مثلاً ‎.Highlight‎ رویش وجود ندارد.
+        /// (خطای دومی که دیده شد، «T تعریفِ Val ندارد»، فقط پیامدِ همین بود:
+        /// وقتی لامبدا کامپایل نمی‌شود، T هم استنتاج نمی‌شود.)
+        /// راه‌حل: هر دو کلاس از OpenXmlCompositeElement ارث می‌برند، پس
+        /// ‎GetFirstChild&lt;T&gt;()‎ روی هر دو یکسان کار می‌کند و اصلاً نیازی به
+        /// selector نیست. این شکل، کلِ دسته‌ی خطاهای «آیا این کلاس آن
+        /// پراپرتی را دارد؟» را از بین می‌برد.
         private T ResolveRunProp<T>(
-            RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart,
-            Func<RunProperties, T> direct, Func<StyleRunProperties, T> fromStyle) where T : class
+            RunProperties rPr, string runStyleId, string pStyleId,
+            MainDocumentPart mainPart) where T : OpenXmlElement
         {
-            var v = rPr == null ? null : direct(rPr);
+            var v = rPr?.GetFirstChild<T>();
             if (v != null) return v;
 
             foreach (var srp in StyleRunPropsChain(mainPart, runStyleId))
             {
-                v = fromStyle(srp);
+                v = srp.GetFirstChild<T>();
                 if (v != null) return v;
             }
             foreach (var srp in StyleRunPropsChain(mainPart, pStyleId))
             {
-                v = fromStyle(srp);
+                v = srp.GetFirstChild<T>();
                 if (v != null) return v;
             }
             return null;
@@ -2273,8 +2285,7 @@ namespace CustomLayoutGenerator
 
             // 🌟 حالا از زنجیره‌ی استایل هم خوانده می‌شود، نه فقط rPrِ مستقیم.
             // InnerText به‌جای .Value.ToString() — همان گیرِ همیشگیِ این SDK.
-            var resolvedUnderline = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
-                                                   r => r.Underline, sr => sr.Underline);
+            var resolvedUnderline = ResolveRunProp<Underline>(rPr, runStyleId, pStyleId, mainPart);
             if (resolvedUnderline != null)
             {
                 var uVal = (resolvedUnderline.Val?.InnerText ?? "single").Trim().ToLowerInvariant();
@@ -2284,10 +2295,8 @@ namespace CustomLayoutGenerator
             // 🐞 خط‌خورده (strikethrough): Word دو حالت دارد — <w:strike/> ساده و
             // <w:dstrike/> دوخط. هر دو را به یک مارکرِ "s" نگاشت می‌کنیم (فلاتر
             // فقط lineThrough دارد). w:val="0" یعنی صراحتاً خاموش.
-            var resolvedStrike = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
-                                                r => r.Strike, sr => sr.Strike);
-            var resolvedDStrike = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
-                                                 r => r.DoubleStrike, sr => sr.DoubleStrike);
+            var resolvedStrike = ResolveRunProp<Strike>(rPr, runStyleId, pStyleId, mainPart);
+            var resolvedDStrike = ResolveRunProp<DoubleStrike>(rPr, runStyleId, pStyleId, mainPart);
             bool _strike = (resolvedStrike != null && (resolvedStrike.Val == null || resolvedStrike.Val.Value)) ||
                            (resolvedDStrike != null && (resolvedDStrike.Val == null || resolvedDStrike.Val.Value));
             if (_strike) markers.Add("s");
@@ -2296,16 +2305,14 @@ namespace CustomLayoutGenerator
             // نمی‌شد. در فلاتر معادلِ مستقیم ندارد و با فیچرِ OpenType 'smcp'
             // تقریب زده می‌شود؛ اگر فونت آن را نداشته باشد بی‌اثر است، نه
             // خراب‌کننده. (w:caps جداست و از قبل با ToUpper اعمال می‌شد.)
-            var resolvedSmallCaps = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
-                                                   r => r.SmallCaps, sr => sr.SmallCaps);
+            var resolvedSmallCaps = ResolveRunProp<SmallCaps>(rPr, runStyleId, pStyleId, mainPart);
             if (resolvedSmallCaps != null &&
                 (resolvedSmallCaps.Val == null || resolvedSmallCaps.Val.Value)) markers.Add("smallcaps");
 
             // 🐞 بالانویس/زیرنویس: در OOXML از <w:vertAlign w:val="superscript|subscript"/>
             // می‌آید. مقدارِ "baseline" یعنی عادی و مارکری تولید نمی‌کند.
-            var _vAlign = ResolveRunProp(rPr, runStyleId, pStyleId, mainPart,
-                                         r => r.VerticalTextAlignment,
-                                         sr => sr.VerticalTextAlignment)?.Val;
+            var _vAlign = ResolveRunProp<VerticalTextAlignment>(
+                rPr, runStyleId, pStyleId, mainPart)?.Val;
             if (_vAlign != null)
             {
                 // InnerText به‌جای .Value.ToString() — همان درسِ BorderValues:
