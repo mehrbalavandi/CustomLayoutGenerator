@@ -37,10 +37,10 @@ namespace CustomLayoutGenerator
         // ادامه پیدا می‌کند)، پس در سطحِ کلاس است.
         private List<SpanData> _pendingAudioSpans = new List<SpanData>();
         private int? _pendingAudioSpanStartMs = null;
-        private HashSet<ParagraphData> _blankWord2Set = new HashSet<ParagraphData>();
-        // 🐞 BlankWord3: مثلِ BlankWord2 متنِ پاراگراف را مخفی می‌کند، ولی
+        private HashSet<ParagraphData> _blankParagraphSet = new HashSet<ParagraphData>();
+        // 🐞 BlkLp: مثلِ BlkPa متنِ پاراگراف را مخفی می‌کند، ولی
         // ادغام/collapse نمی‌شود و شماره‌ی لیست بیرونِ {blk} (دیده‌شدنی) می‌ماند.
-        private HashSet<ParagraphData> _blankWord3Set = new HashSet<ParagraphData>();
+        private HashSet<ParagraphData> _blankListParagraphSet = new HashSet<ParagraphData>();
 
         public void ResetCounters()
         {
@@ -51,8 +51,8 @@ namespace CustomLayoutGenerator
             _lastAudioParagraph = null;
             _pendingAudioSpans = new List<SpanData>();
             _pendingAudioSpanStartMs = null;
-            _blankWord2Set.Clear();
-            _blankWord3Set.Clear();
+            _blankParagraphSet.Clear();
+            _blankListParagraphSet.Clear();
         }
 
         /// آخرین شماره‌ای که کاربر تأیید کرده — فقط برای پیش‌فرضِ دفعه‌ی بعد در
@@ -151,11 +151,11 @@ namespace CustomLayoutGenerator
                         // ۱. پردازش کتاب اصلی
                         List<PageData> pages = ProcessWordDocument(tempFile, outputDir, startPage.Value);
 
-                        // ادغام پاراگراف‌های BlankWord2 برای کتاب اصلی
+                        // ادغام پاراگراف‌های BlkPa برای کتاب اصلی
                         foreach (var page in pages)
                         {
-                            page.Paragraphs = MergeBlankWord2Paragraphs(page.Paragraphs);
-                            page.Paragraphs = WrapBlankWord3Paragraphs(page.Paragraphs);
+                            page.Paragraphs = MergeBlkPaParagraphs(page.Paragraphs);
+                            page.Paragraphs = WrapBlkLpParagraphs(page.Paragraphs);
                         }
 
                         List<AudioScriptTrack> audioScripts = new List<AudioScriptTrack>();
@@ -176,12 +176,12 @@ namespace CustomLayoutGenerator
                                 if (audioDialog.ShowDialog() == DialogResult.OK)
                                 {
                                     audioScripts = ProcessAudioScriptWordFile(audioDialog.FileName, outputDir);
-                                    // ادغام پاراگراف‌های BlankWord2 — حالا به‌ازای هر تراک/فایل
+                                    // ادغام پاراگراف‌های BlkPa — حالا به‌ازای هر تراک/فایل
                                     // جداگانه (چون خروجی دیگر یک لیستِ تخت نیست)
                                     foreach (var track in audioScripts)
                                     {
-                                        track.Paragraphs = MergeBlankWord2Paragraphs(track.Paragraphs);
-                                        track.Paragraphs = WrapBlankWord3Paragraphs(track.Paragraphs);
+                                        track.Paragraphs = MergeBlkPaParagraphs(track.Paragraphs);
+                                        track.Paragraphs = WrapBlkLpParagraphs(track.Paragraphs);
                                     }
                                 }
                             }
@@ -236,8 +236,8 @@ namespace CustomLayoutGenerator
 
                     if (element is Paragraph paragraph)
                     {
-                        bool isBlankWord2 = IsTargetStyle(paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value, wordDoc.MainDocumentPart, "BlankWord2");
-                        bool isBlankWord3 = IsTargetStyle(paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value, wordDoc.MainDocumentPart, "BlankWord3");
+                        bool isBlkPa = IsTargetStyle(paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value, wordDoc.MainDocumentPart, "BlkPa");
+                        bool isBlkLp = IsTargetStyle(paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value, wordDoc.MainDocumentPart, "BlkLp");
 
                         var paraDataList = ParseParagraph(paragraph, wordDoc.MainDocumentPart, resolver, outputDir, false);
 
@@ -250,13 +250,13 @@ namespace CustomLayoutGenerator
                         {
                             currentPage.Paragraphs.AddRange(paraDataList);
 
-                            if (isBlankWord2)
+                            if (isBlkPa)
                             {
-                                foreach (var p in paraDataList) _blankWord2Set.Add(p);
+                                foreach (var p in paraDataList) _blankParagraphSet.Add(p);
                             }
-                            if (isBlankWord3)
+                            if (isBlkLp)
                             {
-                                foreach (var p in paraDataList) _blankWord3Set.Add(p);
+                                foreach (var p in paraDataList) _blankListParagraphSet.Add(p);
                             }
                         }
                     }
@@ -319,8 +319,8 @@ namespace CustomLayoutGenerator
                     {
                         foreach (var p in cell.Elements<Paragraph>())
                         {
-                            bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
-                            bool isBlankWord3 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord3");
+                            bool isBlkPa = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlkPa");
+                            bool isBlkLp = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlkLp");
                             var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, inTable: true, audioMarkersAsSpans: true);
 
                             // 🌟 فیلتر پاراگراف‌های زباله و نامرئی (چون در این
@@ -332,13 +332,13 @@ namespace CustomLayoutGenerator
                             if (parsedParas.Count > 0)
                             {
                                 track.Paragraphs.AddRange(parsedParas);
-                                if (isBlankWord2)
+                                if (isBlkPa)
                                 {
-                                    foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
+                                    foreach (var cp in parsedParas) _blankParagraphSet.Add(cp);
                                 }
-                                if (isBlankWord3)
+                                if (isBlkLp)
                                 {
-                                    foreach (var cp in parsedParas) _blankWord3Set.Add(cp);
+                                    foreach (var cp in parsedParas) _blankListParagraphSet.Add(cp);
                                 }
                             }
                         }
@@ -363,8 +363,8 @@ namespace CustomLayoutGenerator
                 var legacyParas = new List<ParagraphData>();
                 foreach (var p in body.Elements<Paragraph>())
                 {
-                    bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
-                    bool isBlankWord3 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord3");
+                    bool isBlkPa = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlkPa");
+                    bool isBlkLp = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlkLp");
                     var parsedParas = ParseParagraph(p, mainPart, resolver, outputDir, inTable: false, audioMarkersAsSpans: false);
 
                     parsedParas.RemoveAll(pr =>
@@ -374,13 +374,13 @@ namespace CustomLayoutGenerator
                     if (parsedParas.Count > 0)
                     {
                         legacyParas.AddRange(parsedParas);
-                        if (isBlankWord2)
+                        if (isBlkPa)
                         {
-                            foreach (var cp in parsedParas) _blankWord2Set.Add(cp);
+                            foreach (var cp in parsedParas) _blankParagraphSet.Add(cp);
                         }
-                        if (isBlankWord3)
+                        if (isBlkLp)
                         {
-                            foreach (var cp in parsedParas) _blankWord3Set.Add(cp);
+                            foreach (var cp in parsedParas) _blankListParagraphSet.Add(cp);
                         }
                     }
                 }
@@ -432,9 +432,9 @@ namespace CustomLayoutGenerator
         }
 
         // ==========================================
-        // موتور ادغام پاراگراف‌های BlankWord2
+        // موتور ادغام پاراگراف‌های BlkPa
         // ==========================================
-        private List<ParagraphData> MergeBlankWord2Paragraphs(List<ParagraphData> input)
+        private List<ParagraphData> MergeBlkPaParagraphs(List<ParagraphData> input)
         {
             var result = new List<ParagraphData>();
             List<ParagraphData> group = new List<ParagraphData>();
@@ -582,7 +582,7 @@ namespace CustomLayoutGenerator
 
             foreach (var p in input)
             {
-                if (_blankWord2Set.Contains(p))
+                if (_blankParagraphSet.Contains(p))
                 {
                     group.Add(p);
                 }
@@ -598,22 +598,22 @@ namespace CustomLayoutGenerator
         }
 
         // ==========================================
-        // BlankWord3: مثلِ BlankWord2 متنِ خط را مخفی می‌کند، ولی
+        // BlkLp: مثلِ BlkPa متنِ خط را مخفی می‌کند، ولی
         //   (۱) هیچ ادغام/collapseی بین خط‌ها انجام نمی‌دهد (هر خط مستقل)،
         //   (۲) شماره‌ی لیست را بیرونِ {blk} نگه می‌دارد تا دیده شود و فقط
         //       متنِ بعد از شماره مخفی شود.
-        // این تابع بعد از MergeBlankWord2Paragraphs صدا زده می‌شود؛ چون
-        // پاراگراف‌های BlankWord3 در _blankWord2Set نیستند، merge دست‌شان
+        // این تابع بعد از MergeBlkPaParagraphs صدا زده می‌شود؛ چون
+        // پاراگراف‌های BlkLp در _blankParagraphSet نیستند، merge دست‌شان
         // نمی‌زند و این‌جا به‌صورتِ تکی wrap می‌شوند.
         // ==========================================
-        private List<ParagraphData> WrapBlankWord3Paragraphs(List<ParagraphData> input)
+        private List<ParagraphData> WrapBlkLpParagraphs(List<ParagraphData> input)
         {
-            if (_blankWord3Set.Count == 0) return input;
+            if (_blankListParagraphSet.Count == 0) return input;
 
             var result = new List<ParagraphData>();
             foreach (var p in input)
             {
-                if (!_blankWord3Set.Contains(p))
+                if (!_blankListParagraphSet.Contains(p))
                 {
                     result.Add(p);
                     continue;
@@ -663,7 +663,7 @@ namespace CustomLayoutGenerator
                 var firstTextSpan = blankParentSpan.InnerSpans.FirstOrDefault();
                 if (firstTextSpan != null)
                 {
-                    // مثلِ BlankWord2: مارکرهای ساختاریِ b/i/u/s/sub/sup به دکمه‌ی والد ارث نرسند.
+                    // مثلِ BlkPa: مارکرهای ساختاریِ b/i/u/s/sub/sup به دکمه‌ی والد ارث نرسند.
                     blankParentSpan.Markers = StripRunFormatMarkers(firstTextSpan.Markers);
                     blankParentSpan.FillColor = null;
                     blankParentSpan.TextColor = null;
@@ -819,9 +819,9 @@ namespace CustomLayoutGenerator
                 if (p.ParagraphProperties.SectionProperties != null)
                     _currentSection++;
 
-                // 🌟 اضافه شده: پاک کردن رنگ و حاشیه بصری برای BlankWord2
-                bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
-                if (isBlankWord2)
+                // 🌟 اضافه شده: پاک کردن رنگ و حاشیه بصری برای BlkPa
+                bool isBlkPa = IsTargetStyle(p.ParagraphProperties.ParagraphStyleId?.Val?.Value, mainPart, "BlkPa");
+                if (isBlkPa)
                 {
                     basePara.FillColor = null;
                     basePara.Borders = null;
@@ -846,7 +846,7 @@ namespace CustomLayoutGenerator
                 }
             }
 
-            // 🐞 ادغامِ اسپن‌های {blk}ِ متوالی (BlankWord1 که به‌خاطرِ فرمتِ
+            // 🐞 ادغامِ اسپن‌های {blk}ِ متوالی (BlkCh که به‌خاطرِ فرمتِ
             // متفاوتِ بخش‌هایش — مثلاً بخشی ایتالیک، بخشی نرمال — به چند run/اسپنِ
             // {blk} شکسته شده) در یک اسپنِ واحد با InnerSpans. وگرنه فلاتر برای هر
             // اسپنِ {blk} یک آیکونِ چشمِ جدا می‌سازد (ص۴۰ تمرین۰۲: دو آیکون به‌جای
@@ -1130,9 +1130,9 @@ namespace CustomLayoutGenerator
 
             if (IsAllCaps(run.RunProperties, runStyleId, pStyleId, mainPart)) runText = runText.ToUpper();
 
-            // تله‌گذاری ایمن برای BlankWord1
-            bool isBlankWord1 = IsTargetStyle(runStyleId, mainPart, "BlankWord1");
-            if (isBlankWord1)
+            // تله‌گذاری ایمن برای BlkCh
+            bool isBlkCh = IsTargetStyle(runStyleId, mainPart, "BlkCh");
+            if (isBlkCh)
             {
                 runText = "{blk}" + runText + "{/blk}";
             }
@@ -1220,9 +1220,9 @@ namespace CustomLayoutGenerator
                 runBorderStyle = null;
             }
 
-            // 🌟 مسدود کردن نشت رنگ و حاشیه برای کلمات جای‌خالی (BlankWord1)
-            bool isParentBlankWord2 = IsTargetStyle(pStyleId, mainPart, "BlankWord2");
-            if (isBlankWord1)
+            // 🌟 مسدود کردن نشت رنگ و حاشیه برای کلمات جای‌خالی (BlkCh)
+            bool isParentBlkPa = IsTargetStyle(pStyleId, mainPart, "BlkPa");
+            if (isBlkCh)
             {
                 runBorder = null;
             }
@@ -1487,8 +1487,8 @@ namespace CustomLayoutGenerator
                     {
                         if (element is Paragraph p)
                         {
-                            bool isBlankWord2 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord2");
-                            bool isBlankWord3 = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlankWord3");
+                            bool isBlkPa = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlkPa");
+                            bool isBlkLp = IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlkLp");
 
                             var cellParaDataList = ParseParagraph(p, mainPart, resolver, outputDir, true, conditionalBold: cellConditionalBold);
 
@@ -1499,13 +1499,13 @@ namespace CustomLayoutGenerator
                             if (cellParaDataList.Count > 0)
                             {
                                 cellData.Paragraphs.AddRange(cellParaDataList);
-                                if (isBlankWord2)
+                                if (isBlkPa)
                                 {
-                                    foreach (var cp in cellParaDataList) _blankWord2Set.Add(cp);
+                                    foreach (var cp in cellParaDataList) _blankParagraphSet.Add(cp);
                                 }
-                                if (isBlankWord3)
+                                if (isBlkLp)
                                 {
-                                    foreach (var cp in cellParaDataList) _blankWord3Set.Add(cp);
+                                    foreach (var cp in cellParaDataList) _blankListParagraphSet.Add(cp);
                                 }
                             }
                         }
@@ -1554,8 +1554,8 @@ namespace CustomLayoutGenerator
                         }
                     }
 
-                    cellData.Paragraphs = MergeBlankWord2Paragraphs(cellData.Paragraphs);
-                    cellData.Paragraphs = WrapBlankWord3Paragraphs(cellData.Paragraphs);
+                    cellData.Paragraphs = MergeBlkPaParagraphs(cellData.Paragraphs);
+                    cellData.Paragraphs = WrapBlkLpParagraphs(cellData.Paragraphs);
 
                     rowData.Cells.Add(cellData);
                 }
@@ -1680,13 +1680,13 @@ namespace CustomLayoutGenerator
                 ListMarker = source.ListMarker,
                 ListMarkerBold = source.ListMarkerBold,          // 🐞 حفظِ بولد بودنِ شماره هنگام clone
                 ListMarkerColor = source.ListMarkerColor,        // 🐞 حفظِ رنگِ شماره هنگام clone
-                KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlankWord3
+                KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlkLp
                 Spans = new List<SpanData>()
             };
         }
 
         // 🐞 آیا محتوای این اسپن دقیقاً یک {blk}...{/blk}ِ کامل است (یک
-        // BlankWord1ِ inlineِ کامل)، نه یک جای‌خالیِ کوچکِ درونِ متنِ بلندتر.
+        // BlkChِ inlineِ کامل)، نه یک جای‌خالیِ کوچکِ درونِ متنِ بلندتر.
         private bool IsWhollyOneInlineBlank(SpanData s)
         {
             if (s == null || s.Type != "text" || string.IsNullOrEmpty(s.Content)) return false;
@@ -1742,7 +1742,7 @@ namespace CustomLayoutGenerator
                         merged.Content = "{blk}" + combined + "{/blk}";
                         // 🐞 والدِ ادغام‌شده نباید قالب‌بندیِ اجراییِ تکه‌ی اول را حمل کند؛
                         // قالب‌بندیِ هر تکه در InnerSpans است. (پیش‌تر فقط برای
-                        // BlankWord2/3 رعایت می‌شد و این مسیرِ inline جا مانده بود —
+                        // BlkPa/3 رعایت می‌شد و این مسیرِ inline جا مانده بود —
                         // با آمدنِ s/sub/sup خودش را به‌شکلِ «کلِ مودال بالانویس شد» نشان داد.)
                         merged.Markers = StripRunFormatMarkers(merged.Markers);
                         result.Add(merged);
@@ -1843,7 +1843,7 @@ namespace CustomLayoutGenerator
                 TableWidthPercent = source.TableWidthPercent,
                 TableRows = source.TableRows,
                 // 🐞 InnerSpans هم باید کپی شود؛ وگرنه هرجا اسپنِ merged (جای‌خالیِ
-                // BlankWord1ِ چنداستایله یا BlankWord2ِ ادغام‌شده) دوباره Clone شود،
+                // BlkChِ چنداستایله یا BlkPaِ ادغام‌شده) دوباره Clone شود،
                 // بخش‌های استایل‌دار گم می‌شوند و مودال به متنِ تخت با یک استایل
                 // برمی‌گردد. کپیِ کم‌عمقِ لیست کافی است (innerها فقط برای رندر
                 // خوانده می‌شوند).
