@@ -1565,6 +1565,26 @@ namespace CustomLayoutGenerator
             return tableSpan;
         }
 
+        /// <summary>
+        /// رنگِ بوردرِ سند برای JSON. 🐞 در Word رنگِ «auto» (و نبودنِ ویژگیِ
+        /// w:color) برای *بوردر* یعنی مشکی. قبلاً «auto» به null تبدیل می‌شد؛
+        /// فلاتر null را «بوردرِ پیش‌فرضِ خودِ اپ» می‌فهمید و خاکستریِ روشن
+        /// می‌کشید، پس بوردرهای مشکیِ سند در اپ کم‌رنگ دیده می‌شدند (در Mindset 3:
+        /// ۱۱۵ جدولِ CommonTable و چند کادرِ متنی).
+        /// حالا کلمه‌ی "auto" صریحاً نوشته می‌شود و فلاتر آن را مثلِ Word مشکی
+        /// می‌کشد. عمداً "000000" نوشته نمی‌شود: پنجره‌ی متنِ مخفی در فلاتر تمِ
+        /// تیره دارد و آن‌جا «auto» باید رنگِ متن (سفید) باشد، نه مشکیِ ناپیدا —
+        /// پس اطلاعاتِ «auto بودن» باید حفظ شود. null از این به بعد فقط یعنی
+        /// «سند بوردری تعریف نکرده و رنگ پیش‌فرضِ خودِ اپ است» (مثلِ بوردرهای
+        /// پیش‌فرضی که ResponsiveLowering برای بعضی استایل‌ها می‌سازد).
+        /// </summary>
+        private static string WordBorderColor(string color)
+        {
+            if (string.IsNullOrEmpty(color) || color.Equals("auto", StringComparison.OrdinalIgnoreCase))
+                return "auto";
+            return color;
+        }
+
         // 🌟 متد تبدیل مرز خام Word به مدل بهینه‌سازی شده
         private BorderDetail ParseBorder(DocumentFormat.OpenXml.Wordprocessing.BorderType border)
         {
@@ -1576,7 +1596,7 @@ namespace CustomLayoutGenerator
                 Val = border.Val.ToString(),
                 // در ورد، سایز خطوط بر اساس 1/8 Point ذخیره می‌شود. آن را استاندارد می‌کنیم
                 Width = border.Size != null && border.Size.HasValue ? Math.Round((double)border.Size.Value / 8.0, 1) : 1.0,
-                Color = border.Color != null && border.Color.Value != "auto" ? border.Color.Value : null
+                Color = WordBorderColor(border.Color?.Value)
             };
         }
         private BorderDetail ParseBorder(DocumentFormat.OpenXml.Wordprocessing.Border border)
@@ -1588,7 +1608,7 @@ namespace CustomLayoutGenerator
             {
                 Val = border.Val.ToString(),
                 Width = border.Size != null && border.Size.HasValue ? Math.Round((double)border.Size.Value / 8.0, 1) : 1.0,
-                Color = border.Color != null && border.Color.Value != "auto" ? border.Color.Value : null
+                Color = WordBorderColor(border.Color?.Value)
             };
         }
         // 🌟 هسته اصلی استخراج مرزهای سلول با پشتیبانی کامل از ارث‌بری جدول
@@ -2672,10 +2692,9 @@ namespace CustomLayoutGenerator
                     string _bStyle = border.Val.InnerText;
                     if (!string.IsNullOrEmpty(_bStyle))
                         props.Add("borderStyle", _bStyle.ToLowerInvariant());
-                    if (border.Color != null && border.Color.Value != "auto")
-                    {
-                        props.Add("borderColor", border.Color.Value);
-                    }
+                    // 🐞 «auto» دیگر حذف نمی‌شود (فلاتر آن را مثلِ Word مشکی
+                    // می‌کشد). توضیح در WordBorderColor.
+                    props.Add("borderColor", WordBorderColor(border.Color?.Value));
                     if (border.Size != null)
                     {
                         double widthPt = border.Size.Value / 8.0;
