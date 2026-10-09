@@ -185,10 +185,20 @@ namespace CustomLayoutGenerator
                     // سطحِ سلول‌ها) هم بوردر می‌گرفت — دقیقاً همان نقضِ قاعده‌ای
                     // که کاربر گزارش کرد. حالا وقتی هیچ بوردرِ solidی در سند
                     // نباشد BorderMode="none" می‌شود. بدونِ اسکرولِ افقی می‌ماند.
+                    //
+                    // 🐞 درخواستِ بعدیِ کاربر: بوردرِ هر سلول باید عیناً مثلِ سند
+                    // باشد — رنگ، ضخامت، و پنهان/پیدا بودنِ *هر یک از چهار ضلع*.
+                    // "all" یک بوردرِ یکنواخت دورِ کلِ ردیف می‌کشید، در حالی‌که
+                    // بیشترِ NormalTableهای کتاب فقط بخشی از اضلاع را دارند (مثلاً
+                    // فقط خطِ رنگیِ بالا، یا بالای ضخیم + پایینِ نازک بدونِ دو طرف).
+                    // پس حالا "cell": فلاتر هر ضلعِ هر سلول را از Bordersِ همان سلول
+                    // می‌کشد (که ExtractSmartCellBorders با ارث‌بری از جدول و —
+                    // برای NormalTable — از خودِ استایل پر کرده است).
+                    // WidthMode و نبودِ اسکرولِ افقی دست‌نخورده می‌مانند.
                     {
                         bool normalHasSolid = HasSolidBorderInSource(span);
                         span.Borders = span.Borders ?? new BorderDetail();
-                        span.BorderMode = normalHasSolid ? "all" : "none";
+                        span.BorderMode = normalHasSolid ? "cell" : "none";
                         span.WidthMode = "equal";
                     }
                     break;

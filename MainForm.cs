@@ -1467,7 +1467,7 @@ namespace CustomLayoutGenerator
                     if (cellProps.ContainsKey("vAlign")) cellData.VAlign = cellProps["vAlign"];
                     if (cellProps.ContainsKey("colSpan")) cellData.ColSpan = int.Parse(cellProps["colSpan"]);
                     if (cellProps.ContainsKey("rowMerge")) cellData.RowMerge = cellProps["rowMerge"];
-                    cellData.Borders = ExtractSmartCellBorders(cell); // 🌟 تزریق مرزهای استخراج‌شده
+                    cellData.Borders = ExtractSmartCellBorders(cell, mainPart); // 🌟 تزریق مرزهای استخراج‌شده
 
                     // 🐞 آیا این سلول تحتِ conditional formattingِ بولدِ استایلِ
                     // جدول است؟ (ردیفِ اول/ستونِ اول/…). ران‌های داخلش اگر خودشان
@@ -1592,7 +1592,7 @@ namespace CustomLayoutGenerator
             };
         }
         // 🌟 هسته اصلی استخراج مرزهای سلول با پشتیبانی کامل از ارث‌بری جدول
-        private CellBorders ExtractSmartCellBorders(DocumentFormat.OpenXml.Wordprocessing.TableCell cell)
+        private CellBorders ExtractSmartCellBorders(DocumentFormat.OpenXml.Wordprocessing.TableCell cell, MainDocumentPart mainPart = null)
         {
             var row = cell.Ancestors<DocumentFormat.OpenXml.Wordprocessing.TableRow>().FirstOrDefault();
             var table = row?.Ancestors<DocumentFormat.OpenXml.Wordprocessing.Table>().FirstOrDefault();
@@ -1606,6 +1606,31 @@ namespace CustomLayoutGenerator
             var tcBorders = cell.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCellProperties>().FirstOrDefault()?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableCellBorders>().FirstOrDefault();
             var tblBorders = table?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableProperties>().FirstOrDefault()?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableBorders>().FirstOrDefault();
 
+            // 🐞 NormalTable — ارث‌بری از *خودِ استایلِ جدول*: در Word هر ضلعی که
+            // جدول به‌صورتِ inline تعریف نکرده، از tblBordersِ استایل (و زنجیره‌ی
+            // basedOn) می‌آید؛ مثلاً استایلِ NormalTable همه‌ی اضلاع را single
+            // ۰.۵pt تعریف کرده. قبلاً این‌جا فقط بوردرِ inline خوانده می‌شد، پس
+            // ضلعی که فقط در استایل بود در سلول گم می‌شد. ضلعی که inline صراحتاً
+            // none است همچنان پنهان می‌ماند (فقط *نبودِ* عنصر به استایل می‌افتد).
+            // عمداً فقط برای NormalTable: استایل‌های دیگر (DottedTable،
+            // ColumnStackTable، چند CommonTable و TableGrid) هم بوردرِ فقط‌در‌استایل
+            // دارند و فعال‌کردنِ این ارث‌بری برای آن‌ها ظاهرِ فعلی‌شان را عوض می‌کرد.
+            string tblStyleId = table?.Elements<DocumentFormat.OpenXml.Wordprocessing.TableProperties>().FirstOrDefault()?.TableStyle?.Val?.Value;
+            bool inheritStyleBorders = tblStyleId == "NormalTable" && mainPart != null;
+
+            DocumentFormat.OpenXml.Wordprocessing.BorderType TableSide(
+                Func<DocumentFormat.OpenXml.Wordprocessing.TableBorders, DocumentFormat.OpenXml.Wordprocessing.BorderType> pick)
+            {
+                var inline = tblBorders != null ? pick(tblBorders) : null;
+                if (inline != null || !inheritStyleBorders) return inline;
+                return StyleTableBorderSide(mainPart, tblStyleId, pick);
+            }
+
+            // 🐞 Word 2010+ گاهی به‌جای w:left/w:right از w:start/w:end می‌نویسد؛
+            // بدونِ این fallback چنین بوردری کلاً خوانده نمی‌شد.
+            var cellLeft = (DocumentFormat.OpenXml.Wordprocessing.BorderType)tcBorders?.LeftBorder ?? tcBorders?.StartBorder;
+            var cellRight = (DocumentFormat.OpenXml.Wordprocessing.BorderType)tcBorders?.RightBorder ?? tcBorders?.EndBorder;
+
             // قانون ارث‌بری: اول مرز خود سلول، دوم مرز خارجی/داخلی کل جدول
             BorderDetail GetBorder(DocumentFormat.OpenXml.Wordprocessing.BorderType cellB, DocumentFormat.OpenXml.Wordprocessing.BorderType tblOuter, DocumentFormat.OpenXml.Wordprocessing.BorderType tblInner, bool isEdge)
             {
@@ -1618,13 +1643,40 @@ namespace CustomLayoutGenerator
             // ادامه قطعه کد آخر سی‌شارپ شما جهت تکمیل متد:
             var borders = new CellBorders
             {
-                Top = GetBorder(tcBorders?.TopBorder, tblBorders?.TopBorder, tblBorders?.InsideHorizontalBorder, isFirstRow),
-                Bottom = GetBorder(tcBorders?.BottomBorder, tblBorders?.BottomBorder, tblBorders?.InsideHorizontalBorder, isLastRow),
-                Left = GetBorder(tcBorders?.LeftBorder, tblBorders?.LeftBorder, tblBorders?.InsideVerticalBorder, isFirstCol),
-                Right = GetBorder(tcBorders?.RightBorder, tblBorders?.RightBorder, tblBorders?.InsideVerticalBorder, isLastCol)
+                Top = GetBorder(tcBorders?.TopBorder, TableSide(b => b.TopBorder), TableSide(b => b.InsideHorizontalBorder), isFirstRow),
+                Bottom = GetBorder(tcBorders?.BottomBorder, TableSide(b => b.BottomBorder), TableSide(b => b.InsideHorizontalBorder), isLastRow),
+                Left = GetBorder(cellLeft, TableSide(b => (DocumentFormat.OpenXml.Wordprocessing.BorderType)b.LeftBorder ?? b.StartBorder), TableSide(b => b.InsideVerticalBorder), isFirstCol),
+                Right = GetBorder(cellRight, TableSide(b => (DocumentFormat.OpenXml.Wordprocessing.BorderType)b.RightBorder ?? b.EndBorder), TableSide(b => b.InsideVerticalBorder), isLastCol)
             };
 
             return borders;
+        }
+
+        /// <summary>
+        /// یک ضلعِ بوردر از tblBordersِ استایلِ جدول، با دنبال‌کردنِ زنجیره‌ی
+        /// basedOn (استایلِ فرزند بر والد مقدم است). اگر هیچ‌جای زنجیره آن ضلع
+        /// تعریف نشده باشد null.
+        /// </summary>
+        private static DocumentFormat.OpenXml.Wordprocessing.BorderType StyleTableBorderSide(
+            MainDocumentPart mainPart, string styleId,
+            Func<DocumentFormat.OpenXml.Wordprocessing.TableBorders, DocumentFormat.OpenXml.Wordprocessing.BorderType> pick)
+        {
+            var styles = mainPart?.StyleDefinitionsPart?.Styles;
+            if (styles == null || string.IsNullOrEmpty(styleId)) return null;
+
+            var style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == styleId);
+            int guard = 0;
+            while (style != null && guard++ < 12)
+            {
+                var tb = style.StyleTableProperties?.TableBorders;
+                var side = tb != null ? pick(tb) : null;
+                if (side != null) return side;
+
+                var basedOn = style.BasedOn?.Val?.Value;
+                if (string.IsNullOrEmpty(basedOn)) break;
+                style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId?.Value == basedOn);
+            }
+            return null;
         }
         // ==========================================
         // متدهای استخراج جزئیات، فونت و استایل‌ها
