@@ -164,14 +164,52 @@ namespace CustomLayoutGenerator
         // (<w:lvl>/<w:rPr>/<w:color>) خوانده می‌شود، نه از رانِ متن — چون کاربر
         // رنگ را روی خودِ نشانگر تنظیم می‌کند و آن‌جا ذخیره می‌شود.
         // خروجی: هگزِ ۶ رقمی بدونِ #، یا null اگر تعریف نشده / auto باشد.
-        public string LevelColor(int numId, int level)
+        public string LevelColor(int numId, int level) =>
+            TryLevelColor(numId, level, out var color) ? color : null;
+
+        // 🐞 قاعده‌ی Word برای رنگ/پس‌زمینه/کادرِ شماره‌ی خودکار: اگر سطحِ numbering
+        // صراحتاً چیزی بگوید برنده است؛ وگرنه «نشانه‌ی پایانِ پاراگراف» و بعد
+        // استایل تصمیم می‌گیرند (ParseParagraph). این سه متد فقط «صراحت» را
+        // گزارش می‌کنند: false یعنی سطحِ numbering چیزی نگفته.
+
+        /// <summary>
+        /// رنگِ صریحِ سطحِ numbering. true اگر &lt;w:color&gt; دارد؛ color = هگزِ
+        /// بزرگ‌حرف بدونِ #، یا null اگر «auto» باشد (یعنی رنگِ پیش‌فرضِ متن).
+        /// </summary>
+        public bool TryLevelColor(int numId, int level, out string color)
+        {
+            color = null;
+            var c = LevelRunProps(numId, level)?.GetFirstChild<Color>();
+            if (c == null) return false;
+            color = NormalizeHex(c.Val?.Value);
+            return true;
+        }
+
+        /// <summary>
+        /// پس‌زمینه‌ی صریحِ سطحِ numbering (&lt;w:shd&gt;). fill = هگز یا null (auto).
+        /// </summary>
+        public bool TryLevelFill(int numId, int level, out string fill)
+        {
+            fill = null;
+            var s = LevelRunProps(numId, level)?.GetFirstChild<Shading>();
+            if (s == null) return false;
+            fill = NormalizeHex(s.Fill?.Value);
+            return true;
+        }
+
+        /// <summary>کادرِ صریحِ سطحِ numbering (&lt;w:bdr&gt;)؛ null اگر تعریف نشده.</summary>
+        public Border LevelBorder(int numId, int level) =>
+            LevelRunProps(numId, level)?.GetFirstChild<Border>();
+
+        private NumberingSymbolRunProperties LevelRunProps(int numId, int level)
         {
             if (!_absByNum.TryGetValue(numId, out var abs)) return null;
-            var lvlDef = LevelOf(abs, level);
-            var rpr = lvlDef?.NumberingSymbolRunProperties;
-            if (rpr == null) return null;
-            var c = rpr.GetFirstChild<Color>();
-            var val = c?.Val?.Value;
+            return LevelOf(abs, level)?.NumberingSymbolRunProperties;
+        }
+
+        /// <summary>هگزِ رنگ → بزرگ‌حرف بدونِ #؛ «auto» یا خالی → null.</summary>
+        public static string NormalizeHex(string val)
+        {
             if (string.IsNullOrEmpty(val) || val.Equals("auto", StringComparison.OrdinalIgnoreCase))
                 return null;
             return val.TrimStart('#').ToUpperInvariant();

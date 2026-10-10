@@ -554,10 +554,22 @@ namespace CustomLayoutGenerator
                         if (p.ListMarkerBold == true) markerMarkers.Add("b");
                         markerMarkers.Add(_pindentMarker); // 🐞 تورفتگیِ پاراگراف
                         _paraFirstSpan = false;
-                        var markerSpan = new SpanData { Type = "text", Content = p.ListMarker + "  ", Markers = markerMarkers };
+                        // 🐞 اگر شماره پس‌زمینه یا کادر دارد، دو فاصله‌ی بعدش اسپنِ جدایی
+                        // می‌شوند تا کادر/رنگ فقط دورِ خودِ شماره باشد (مثلِ Word).
+                        bool _markerBoxed = !string.IsNullOrEmpty(p.ListMarkerFill) || p.ListMarkerBorder != null;
+                        var markerSpan = new SpanData { Type = "text", Content = _markerBoxed ? p.ListMarker : p.ListMarker + "  ", Markers = markerMarkers };
                         // 🐞 رنگِ شماره در مودالِ متنِ مخفی هم حفظ شود
                         if (!string.IsNullOrEmpty(p.ListMarkerColor)) markerSpan.TextColor = p.ListMarkerColor;
+                        // 🐞 پس‌زمینه/کادرِ شماره هم (مثلِ Word) در مودال حفظ شود
+                        if (!string.IsNullOrEmpty(p.ListMarkerFill)) markerSpan.FillColor = p.ListMarkerFill;
+                        if (p.ListMarkerBorder != null)
+                        {
+                            markerSpan.Borders = p.ListMarkerBorder;
+                            markerSpan.HasBorders = "true";
+                        }
                         blankParentSpan.InnerSpans.Add(markerSpan);
+                        if (_markerBoxed)
+                            blankParentSpan.InnerSpans.Add(new SpanData { Type = "text", Content = "  " });
                         combinedRawText += p.ListMarker + "  ";
                     }
 
@@ -834,6 +846,15 @@ namespace CustomLayoutGenerator
                     // که اگر صراحتاً چیزی بگوید برنده است. قبلاً فقط سطحِ numbering
                     // خوانده می‌شد؛ پس شماره‌ای که بولدی‌اش از نشانه‌ی پایانِ پاراگراف
                     // می‌آمد (Mindset 2 ص۵۳ تمرینِ ۰۶) در اپ regular دیده می‌شد.
+                    // 🐞 «نشانه‌ی پایانِ پاراگراف» گاهی خودش یک استایلِ کاراکتری دارد
+                    // (<w:pPr><w:rPr><w:rStyle>)، مثلاً «Comic» در جواب‌های دست‌نویس‌مانند؛
+                    // Word آن را هم روی شماره اعمال می‌کند (بعد از ویژگی‌های مستقیمِ
+                    // نشانه، قبل از استایلِ پاراگراف).
+                    var _markRPr = p.ParagraphProperties?.ParagraphMarkRunProperties;
+                    string _markRStyle = _markRPr?.GetFirstChild<RunStyle>()?.Val?.Value;
+                    string _pStyleForMarker = p.ParagraphProperties?.ParagraphStyleId?.Val?.Value
+                                              ?? DefaultParagraphStyleId(mainPart);
+
                     bool? _lvlBold = Numbering(mainPart).LevelBoldExplicit(_np.Value.NumId, _np.Value.Level);
                     if (_lvlBold.HasValue)
                     {
@@ -841,12 +862,52 @@ namespace CustomLayoutGenerator
                     }
                     else
                     {
-                        var _markBold = p.ParagraphProperties?.ParagraphMarkRunProperties?.GetFirstChild<Bold>();
+                        var _markBold = _markRPr?.GetFirstChild<Bold>();
                         basePara.ListMarkerBold = _markBold != null
                             ? (_markBold.Val == null || _markBold.Val.Value)
-                            : IsBold(null, null, p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, false);
+                            : IsBold(null, _markRStyle, _pStyleForMarker, mainPart, false);
                     }
-                    basePara.ListMarkerColor = Numbering(mainPart).LevelColor(_np.Value.NumId, _np.Value.Level);
+
+                    // 🐞 رنگِ شماره با همان قاعده‌ی Word (قبلاً فقط سطحِ numbering
+                    // خوانده می‌شد): سطحِ numbering اگر صراحتاً رنگ دارد (حتی «auto»)
+                    // ← رنگِ مستقیمِ نشانه‌ی پایانِ پاراگراف ← استایلِ کاراکتریِ
+                    // نشانه ← زنجیره‌ی استایلِ پاراگراف. «auto» یعنی رنگِ پیش‌فرضِ متن (null).
+                    if (Numbering(mainPart).TryLevelColor(_np.Value.NumId, _np.Value.Level, out var _lvlColor))
+                    {
+                        basePara.ListMarkerColor = _lvlColor;
+                    }
+                    else
+                    {
+                        var _markColor = _markRPr?.GetFirstChild<DocumentFormat.OpenXml.Wordprocessing.Color>();
+                        if (_markColor != null)
+                            basePara.ListMarkerColor = NumberingResolver.NormalizeHex(_markColor.Val?.Value);
+                        else
+                            basePara.ListMarkerColor =
+                                NumberingResolver.NormalizeHex(GetColorFromStyleId(mainPart, _markRStyle))
+                                ?? NumberingResolver.NormalizeHex(GetColorFromStyleId(mainPart, _pStyleForMarker));
+                    }
+
+                    // 🐞 پس‌زمینه و کادرِ شماره، باز با همان قاعده (سطحِ numbering ←
+                    // نشانه‌ی پایانِ پاراگراف ← استایلِ کاراکتریِ نشانه). Mindset 2 ص۱۱۷ و
+                    // Mindset 3 ص۱۲۸: شماره‌ی سفید روی کادرِ آبی؛ بدونِ این دو، شماره‌ی
+                    // سفید روی صفحه‌ی سفید ناپیدا می‌شد. (استایلِ پاراگراف عمداً لحاظ
+                    // نمی‌شود، همان‌طور که کادرِ رانِ متن هم از استایلِ پاراگراف ارث نمی‌برد.)
+                    if (Numbering(mainPart).TryLevelFill(_np.Value.NumId, _np.Value.Level, out var _lvlFill))
+                    {
+                        basePara.ListMarkerFill = _lvlFill;
+                    }
+                    else
+                    {
+                        var _markShd = _markRPr?.GetFirstChild<Shading>();
+                        basePara.ListMarkerFill = _markShd != null
+                            ? NumberingResolver.NormalizeHex(_markShd.Fill?.Value)
+                            : NumberingResolver.NormalizeHex(GetShadingFillFromStyleId(mainPart, _markRStyle));
+                    }
+
+                    Border _mBorder = Numbering(mainPart).LevelBorder(_np.Value.NumId, _np.Value.Level)
+                                      ?? _markRPr?.GetFirstChild<Border>()
+                                      ?? (!string.IsNullOrEmpty(_markRStyle) ? GetRunBorderFromStyle(mainPart, _markRStyle) : null);
+                    basePara.ListMarkerBorder = ParseBorder(_mBorder); // none/nil → null
                 }
 
                 // 🐞 صفحه ۱۵ تمرین ۹ (لیستِ تودرتو): تورفتگیِ لیست اغلب در
@@ -1230,7 +1291,12 @@ namespace CustomLayoutGenerator
                         span.Content = span.Content.Replace("{/blk}{blk}", "");
 
                         // ۲. اگر بعد از حذف تگ‌ها، محتوای اسپن کاملاً خالی ("") شد، کل شیء Span را پاک کن!
-                        if (string.IsNullOrEmpty(span.Content))
+                        // 🐞 استثنا: تنها اسپنِ پاراگرافِ لیستیِ «فقط‌شماره» (Mindset 2 ص۵۳
+                        // تمرینِ ۰۶). همین اسپنِ خالی فونت و اندازه‌ی واقعیِ پاراگراف (fn:/sz:)
+                        // را به فلاتر می‌رساند. قبلاً همین‌جا پاک می‌شد، پس شماره با فونتِ
+                        // سیستمیِ گوشی کشیده می‌شد که بولدش کار نمی‌کند (شماره regular دیده می‌شد).
+                        bool _markerOnlyCarrier = rPara.Spans.Count == 1 && !string.IsNullOrEmpty(rPara.ListMarker);
+                        if (string.IsNullOrEmpty(span.Content) && !_markerOnlyCarrier)
                         {
                             rPara.Spans.RemoveAt(i);
                         }
@@ -1936,6 +2002,8 @@ namespace CustomLayoutGenerator
                 ListMarker = source.ListMarker,
                 ListMarkerBold = source.ListMarkerBold,          // 🐞 حفظِ بولد بودنِ شماره هنگام clone
                 ListMarkerColor = source.ListMarkerColor,        // 🐞 حفظِ رنگِ شماره هنگام clone
+                ListMarkerFill = source.ListMarkerFill,          // 🐞 حفظِ پس‌زمینه‌ی شماره هنگام clone
+                ListMarkerBorder = source.ListMarkerBorder != null ? new BorderDetail { Val = source.ListMarkerBorder.Val, Width = source.ListMarkerBorder.Width, Color = source.ListMarkerBorder.Color } : null, // 🐞 کادرِ شماره
                 KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlkLp
                 Spans = new List<SpanData>()
             };
@@ -2178,6 +2246,37 @@ namespace CustomLayoutGenerator
                 style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
             }
             return null;
+        }
+
+        /// <summary>
+        /// 🐞 پس‌زمینه‌ی (w:shd/@w:fill) یک استایل با دنبال‌کردنِ زنجیره‌ی basedOn؛
+        /// اولین w:shdِ تعریف‌شده تصمیم می‌گیرد (حتی اگر auto باشد = بدونِ پس‌زمینه).
+        /// برای پس‌زمینه‌ی شماره‌ی لیست وقتی نشانه‌ی پایانِ پاراگراف استایلِ کاراکتری دارد.
+        /// </summary>
+        private string GetShadingFillFromStyleId(MainDocumentPart mainPart, string styleId)
+        {
+            if (mainPart?.StyleDefinitionsPart?.Styles == null || string.IsNullOrEmpty(styleId)) return null;
+            var style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == styleId);
+            while (style != null)
+            {
+                var shd = style.StyleRunProperties?.Shading;
+                if (shd != null) return shd.Fill?.Value;
+                var basedOn = style.BasedOn?.Val?.Value;
+                if (string.IsNullOrEmpty(basedOn)) break;
+                style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 🐞 شناسه‌ی استایلِ پاراگرافِ پیش‌فرضِ سند (معمولاً «Normal»): پاراگرافی که
+        /// pStyle ندارد در Word همین استایل را دارد؛ برای قاعده‌ی رنگ/بولدِ شماره.
+        /// </summary>
+        private string DefaultParagraphStyleId(MainDocumentPart mainPart)
+        {
+            return mainPart?.StyleDefinitionsPart?.Styles?.Elements<Style>()
+                .FirstOrDefault(s => s.Type == StyleValues.Paragraph && s.Default?.Value == true)
+                ?.StyleId?.Value;
         }
 
         private bool IsAllCaps(RunProperties rPr, string runStyleId, string pStyleId, MainDocumentPart mainPart)

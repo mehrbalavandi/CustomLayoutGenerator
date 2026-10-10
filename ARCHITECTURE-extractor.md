@@ -56,7 +56,9 @@ PageData          ← یک صفحه (PageNumber + Paragraphs)
     ├ ویژگی‌های بلوکی: Alignment, Direction, IndentLeft/Right/FirstLine,
     │  SpaceBefore/After, LineSpacing, FillColor
     ├ لیست: ListType, ListLevel, ListMarker, ListMarkerBold, ListMarkerColor,
-    │  KeepListMarkerVisible
+    │  ListMarkerFill, ListMarkerBorder, KeepListMarkerVisible
+    │  (قالبِ شماره مثلِ Word: سطحِ numbering اگر صریح باشد ← نشانه‌ی پایانِ
+    │  پاراگراف ← استایلِ کاراکتریِ نشانه ← استایلِ پاراگراف)
     ├ صوت: StartMs, EndMs, AudioTrackName
     └ Spans
        └ SpanData ← یک تکه‌ی درون‌خطی. Type یکی از:

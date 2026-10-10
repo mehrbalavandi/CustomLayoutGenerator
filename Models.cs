@@ -29,7 +29,9 @@ namespace CustomLayoutGenerator
         public int? ListLevel { get; set; }            // 0 = سطح اول
         public string ListMarker { get; set; }         // "1." , "a)" , "•"
         public bool? ListMarkerBold { get; set; }      // 🐞 شماره‌ی لیست بولد است؟ (از rPr سطحِ numbering، نه رانِ متن)
-        public string ListMarkerColor { get; set; }    // 🐞 رنگِ شماره/بولتِ لیست (هگز بدونِ #، از rPr سطحِ numbering)
+        public string ListMarkerColor { get; set; }    // 🐞 رنگِ شماره/بولتِ لیست (هگز بدونِ #). قاعده‌ی Word: سطحِ numbering ← نشانه‌ی پایانِ پاراگراف ← استایل
+        public string ListMarkerFill { get; set; }     // 🐞 پس‌زمینه‌ی شماره (هگز بدونِ #)، با همان قاعده؛ null = بدونِ پس‌زمینه
+        public BorderDetail ListMarkerBorder { get; set; } // 🐞 کادرِ دورِ شماره، با همان قاعده؛ null = بدونِ کادر
         // 🐞 BlkLp: شماره‌ی لیست بیرونِ {blk} می‌ماند (دیده می‌شود) و فقط
         // متنِ بعد از شماره مخفی می‌شود — برخلافِ BlkPa که کلِ خط (شاملِ
         // شماره) را در یک بلاکِ مخفیِ ادغام‌شده می‌گذارد.
