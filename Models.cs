@@ -113,6 +113,15 @@ namespace CustomLayoutGenerator
 
         public List<SpanData> InnerSpans { get; set; } = new List<SpanData>();
         public List<TableRowData> TableRows { get; set; } = new List<TableRowData>();
+
+        // 🌟 محتوای غنیِ جای‌خالی (فقط روی اسپنِ {blk}ی که از ادغامِ BlkPa ساخته
+        // شده، و فقط وقتی آن محتوا چیزی جز متن هم دارد: عکس، جدول، …). همان
+        // پاراگراف‌های اصلیِ سند با همه‌ی جزئیات، تا فلاتر مودالِ آیکونِ چشم را
+        // دقیقاً با همان رندرِ صفحه (جدول، عکس، لیست، رنگ‌ها) نشان دهد.
+        // Content و InnerSpans برای جستجو و نسخه‌های قدیمیِ اپ همچنان پر می‌شوند
+        // (متنِ جدول‌ها هم به‌صورتِ تخت در آن‌ها هست). برای جای‌خالیِ فقط‌متنی
+        // null می‌ماند و در JSON اصلاً نوشته نمی‌شود — رفتارِ قبلی دست‌نخورده.
+        public List<ParagraphData> HiddenParagraphs { get; set; }
         // 🌟 ریسپانسیو (نتیجهٔ lowering از روی نام استایلِ Word)
         public string ResponsiveStrategy { get; set; }  // "horizontalScroll" | "collapseToCards"
         public string LayoutDirection { get; set; }      // برای Type=="layout": "row" | "column"

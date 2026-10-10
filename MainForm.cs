@@ -42,6 +42,36 @@ namespace CustomLayoutGenerator
         // ادغام/collapse نمی‌شود و شماره‌ی لیست بیرونِ {blk} (دیده‌شدنی) می‌ماند.
         private HashSet<ParagraphData> _blankListParagraphSet = new HashSet<ParagraphData>();
 
+        // 🌟 جدولِ مخفی (داخلِ جواب‌های آیکونِ چشم): وقتی کلِ یک جدول با استایلِ
+        // BlkPa مخفی شده، پاراگراف‌های *داخلِ* آن نباید جداگانه جای‌خالی شوند —
+        // خودِ جدول یک‌جا مخفی است و داخلِ مودال عیناً مثلِ صفحه نشان داده
+        // می‌شود. در طولِ پارسِ چنین جدولی این شمارنده > ۰ است.
+        private int _suppressBlankDepth = 0;
+
+        /// <summary>
+        /// آیا این جدول «کلاً مخفی» است؟ قراردادِ نگارش در Word: کلِ جدول را
+        /// انتخاب کنید و استایلِ BlkPa را بزنید (Word آن را روی همه‌ی پاراگراف‌های
+        /// سلول‌ها اعمال می‌کند). یعنی: هر پاراگرافِ داخلِ جدول (شاملِ جدول‌های
+        /// تودرتو) که متن یا عکس دارد، استایلِ BlkPa دارد — و دست‌کم یکی هست.
+        /// جدولی که فقط *بعضی* سلول‌هایش BlkPa است (۱۸۲ جدولِ فعلیِ کتاب: جوابِ
+        /// تک‌تکِ سلول‌ها) مثلِ قبل رفتار می‌کند: هر سلول آیکونِ چشمِ خودش.
+        /// </summary>
+        private bool IsHiddenTable(Table table, MainDocumentPart mainPart)
+        {
+            bool any = false;
+            foreach (var p in table.Descendants<Paragraph>())
+            {
+                bool hasContent = !string.IsNullOrWhiteSpace(p.InnerText)
+                    || p.Descendants<DocumentFormat.OpenXml.Wordprocessing.Drawing>().Any()
+                    || p.Descendants().Any(e => e.LocalName == "imagedata");
+                if (!hasContent) continue;
+                if (!IsTargetStyle(p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, "BlkPa"))
+                    return false;
+                any = true;
+            }
+            return any;
+        }
+
         public void ResetCounters()
         {
             _currentPage = 1;
@@ -262,10 +292,18 @@ namespace CustomLayoutGenerator
                     }
                     else if (element is Table table)
                     {
-                        var tableSpan = ParseTable(table, wordDoc.MainDocumentPart, resolver, outputDir);
+                        // 🌟 جدولِ کلاً مخفی (BlkPa روی همه‌ی پاراگراف‌هایش) خودش یک
+                        // «پاراگرافِ جای‌خالی» می‌شود تا با BlkPaهای مجاورش در یک
+                        // آیکونِ چشم ادغام شود؛ پاراگراف‌های داخلش جای‌خالیِ جدا نمی‌شوند.
+                        bool hiddenTable = _suppressBlankDepth == 0 && IsHiddenTable(table, wordDoc.MainDocumentPart);
+                        if (hiddenTable) _suppressBlankDepth++;
+                        SpanData tableSpan;
+                        try { tableSpan = ParseTable(table, wordDoc.MainDocumentPart, resolver, outputDir); }
+                        finally { if (hiddenTable) _suppressBlankDepth--; }
                         var para = new ParagraphData();
                         para.Spans.Add(tableSpan);
                         currentPage.Paragraphs.Add(para);
+                        if (hiddenTable) _blankParagraphSet.Add(para);
                     }
                 }
             }
@@ -455,6 +493,15 @@ namespace CustomLayoutGenerator
 
                 string combinedRawText = "";
 
+                // 🌟 محتوای غنی در جواب‌های آیکونِ چشم: اگر این گروه چیزی جز متن
+                // هم دارد (عکس، جدول، …)، قبلاً آن بخش‌ها از جای‌خالی بیرون
+                // انداخته می‌شدند (nonTextSpans) و *آشکار* کنارِ آیکون دیده
+                // می‌شدند. حالا داخلِ همان جای‌خالی می‌مانند: پاراگراف‌های اصلی
+                // با همه‌ی جزئیات در HiddenParagraphs می‌روند تا فلاتر مودال را با
+                // همان رندرِ صفحه بسازد؛ متنشان (شاملِ متنِ جدول‌ها) هم مثلِ قبل در
+                // Content/InnerSpans می‌آید تا جستجو و نسخه‌های قدیمیِ اپ کار کنند.
+                bool richGroup = group.Any(gp => gp.Spans.Any(s => s.Type != "text"));
+
                 for (int i = 0; i < group.Count; i++)
                 {
                     var p = group[i];
@@ -532,6 +579,23 @@ namespace CustomLayoutGenerator
                                 combinedRawText += cleanSpan.Content;
                             }
                         }
+                        else if (richGroup)
+                        {
+                            // 🌟 جدول/عکس داخلِ جای‌خالی می‌ماند (در HiddenParagraphs)؛
+                            // این‌جا فقط متنِ تختش برای جستجو/نسخه‌ی قدیمی اضافه می‌شود.
+                            string flat = PlainTextOf(span);
+                            if (!string.IsNullOrWhiteSpace(flat))
+                            {
+                                var flatSpan = new SpanData { Type = "text", Content = flat, Markers = new List<string>() };
+                                if (_paraFirstSpan)
+                                {
+                                    flatSpan.Markers.Add(_pindentMarker);
+                                    _paraFirstSpan = false;
+                                }
+                                blankParentSpan.InnerSpans.Add(flatSpan);
+                                combinedRawText += flat;
+                            }
+                        }
                         else
                         {
                             nonTextSpans.Add(span);
@@ -543,6 +607,19 @@ namespace CustomLayoutGenerator
                         blankParentSpan.InnerSpans.Add(new SpanData { Type = "text", Content = "\n" });
                         combinedRawText += "\n";
                     }
+                }
+
+                if (richGroup)
+                {
+                    // جای‌خالیِ فقط‌عکس هیچ متنی ندارد؛ یک برچسبِ کوتاه می‌گذاریم تا
+                    // آیکونِ چشم ساخته شود و نسخه‌ی قدیمیِ اپ هم چیزی نشان دهد.
+                    if (string.IsNullOrWhiteSpace(combinedRawText))
+                    {
+                        const string placeholder = "[image]";
+                        blankParentSpan.InnerSpans.Add(new SpanData { Type = "text", Content = placeholder, Markers = new List<string>() });
+                        combinedRawText = placeholder;
+                    }
+                    blankParentSpan.HiddenParagraphs = group.Select(CloneParagraphForHidden).ToList();
                 }
 
                 blankParentSpan.Content = "{blk}" + combinedRawText + "{/blk}";
@@ -595,6 +672,54 @@ namespace CustomLayoutGenerator
             flushGroup();
 
             return result;
+        }
+
+        /// <summary>
+        /// نسخه‌ی پاراگراف برای HiddenParagraphs: همه‌ی ویژگی‌ها و اسپن‌ها، فقط
+        /// علامت‌های {blk} از متن‌ها پاک می‌شوند (داخلِ مودال دیگر چیزی مخفی نیست).
+        /// اسپن‌های غیرمتنی (جدول/عکس) همان شیءِ اصلی‌اند — جای دیگری استفاده
+        /// نمی‌شوند، چون در گروهِ غنی به merged.Spans اضافه نمی‌شوند.
+        /// </summary>
+        private ParagraphData CloneParagraphForHidden(ParagraphData source)
+        {
+            var copy = CloneParagraphProperties(source);
+            copy.Spans = source.Spans.Select(s =>
+            {
+                if (s.Type != "text") return s;
+                var c = CloneSpan(s);
+                if (!string.IsNullOrEmpty(c.Content))
+                    c.Content = c.Content.Replace("{blk}", "").Replace("{/blk}", "");
+                return c;
+            }).ToList();
+            return copy;
+        }
+
+        /// <summary>
+        /// متنِ تختِ یک اسپن (و برای جدول: همه‌ی سلول‌ها به‌ترتیب، سلول‌ها با « | »
+        /// و ردیف‌ها با خطِ جدید) — فقط برای جستجو و نمایشِ نسخه‌های قدیمیِ اپ.
+        /// </summary>
+        private static string PlainTextOf(SpanData span)
+        {
+            if (span == null) return "";
+            if (span.Type == "text")
+                return (span.Content ?? "").Replace("{blk}", "").Replace("{/blk}", "");
+            if (span.TableRows == null || span.TableRows.Count == 0) return "";
+
+            var rows = new List<string>();
+            foreach (var row in span.TableRows)
+            {
+                var cells = new List<string>();
+                foreach (var cell in row.Cells)
+                {
+                    var paras = cell.Paragraphs
+                        .Select(p => string.Concat(p.Spans.Select(PlainTextOf)).Trim())
+                        .Where(t => t.Length > 0);
+                    string cellText = string.Join(" ", paras);
+                    if (cellText.Length > 0) cells.Add(cellText);
+                }
+                if (cells.Count > 0) rows.Add(string.Join(" | ", cells));
+            }
+            return string.Join("\n", rows);
         }
 
         // ==========================================
@@ -1499,11 +1624,13 @@ namespace CustomLayoutGenerator
                             if (cellParaDataList.Count > 0)
                             {
                                 cellData.Paragraphs.AddRange(cellParaDataList);
-                                if (isBlkPa)
+                                // 🌟 داخلِ جدولِ کلاً مخفی، پاراگراف‌ها جای‌خالیِ جدا نمی‌شوند
+                                // (خودِ جدول یک‌جا مخفی است و در مودال عیناً نشان داده می‌شود).
+                                if (isBlkPa && _suppressBlankDepth == 0)
                                 {
                                     foreach (var cp in cellParaDataList) _blankParagraphSet.Add(cp);
                                 }
-                                if (isBlkLp)
+                                if (isBlkLp && _suppressBlankDepth == 0)
                                 {
                                     foreach (var cp in cellParaDataList) _blankListParagraphSet.Add(cp);
                                 }
@@ -1511,7 +1638,13 @@ namespace CustomLayoutGenerator
                         }
                         else if (element is Table nestedTable)
                         {
-                            var nestedTableSpan = ParseTable(nestedTable, mainPart, resolver, outputDir);
+                            // 🌟 جدولِ تودرتوی کلاً مخفی داخلِ یک سلول: مثلِ سطحِ صفحه،
+                            // خودش یک پاراگرافِ جای‌خالی می‌شود (پایین‌تر).
+                            bool hiddenNested = _suppressBlankDepth == 0 && IsHiddenTable(nestedTable, mainPart);
+                            if (hiddenNested) _suppressBlankDepth++;
+                            SpanData nestedTableSpan;
+                            try { nestedTableSpan = ParseTable(nestedTable, mainPart, resolver, outputDir); }
+                            finally { if (hiddenNested) _suppressBlankDepth--; }
 
                             // 🐞 پیشنهادِ کاربر: CompactTable (نشان‌های تک‌سلولی
                             // مثلِ شماره‌ی تمرین) اصلاً به‌عنوانِ یک span از نوعِ
@@ -1542,6 +1675,7 @@ namespace CustomLayoutGenerator
                                         innerSpan.FillColor = compactCell.FillColor;
                                     }
                                     cellData.Paragraphs.Add(innerPara);
+                                    if (hiddenNested) _blankParagraphSet.Add(innerPara);
                                 }
                             }
                             else
@@ -1550,6 +1684,7 @@ namespace CustomLayoutGenerator
                                 var nestedPara = new ParagraphData();
                                 nestedPara.Spans.Add(nestedTableSpan);
                                 cellData.Paragraphs.Add(nestedPara);
+                                if (hiddenNested) _blankParagraphSet.Add(nestedPara);
                             }
                         }
                     }
@@ -1919,7 +2054,10 @@ namespace CustomLayoutGenerator
                 // بخش‌های استایل‌دار گم می‌شوند و مودال به متنِ تخت با یک استایل
                 // برمی‌گردد. کپیِ کم‌عمقِ لیست کافی است (innerها فقط برای رندر
                 // خوانده می‌شوند).
-                InnerSpans = source.InnerSpans != null ? new List<SpanData>(source.InnerSpans) : new List<SpanData>()
+                InnerSpans = source.InnerSpans != null ? new List<SpanData>(source.InnerSpans) : new List<SpanData>(),
+                // 🌟 محتوای غنیِ جای‌خالی (جدول/عکسِ داخلِ جوابِ مخفی) — بدونِ این،
+                // هر Cloneِ بعدیِ اسپنِ {blk} آن را بی‌صدا دور می‌ریخت.
+                HiddenParagraphs = source.HiddenParagraphs != null ? new List<ParagraphData>(source.HiddenParagraphs) : null
             };
         }
 

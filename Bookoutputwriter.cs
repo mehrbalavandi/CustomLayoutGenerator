@@ -157,6 +157,12 @@ namespace CustomLayoutGenerator
                             });
                         }
                     }
+                    // 🌟 لینکِ صوتیِ داخلِ محتوای غنیِ جای‌خالی (مودالِ آیکونِ چشم)
+                    if (s.HiddenParagraphs != null)
+                    {
+                        foreach (var hp in s.HiddenParagraphs)
+                            ScanSpans(hp.Spans, pageNumber, topParaIndex);
+                    }
                     if (s.Type == "table" && s.TableRows != null)
                     {
                         foreach (var row in s.TableRows)

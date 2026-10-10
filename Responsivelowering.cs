@@ -39,6 +39,10 @@ namespace CustomLayoutGenerator
 
             // بازگشت: اسپن‌های داخلی و پاراگراف‌های داخل سلول‌های جدول
             foreach (var inner in span.InnerSpans) LowerSpan(inner);
+            // 🌟 جدول‌های داخلِ محتوای غنیِ جای‌خالی (مودالِ آیکونِ چشم) هم باید
+            // BorderMode/WidthMode/… بگیرند تا در مودال دقیقاً مثلِ صفحه رندر شوند.
+            if (span.HiddenParagraphs != null)
+                foreach (var hp in span.HiddenParagraphs) LowerParagraph(hp);
             foreach (var row in span.TableRows)
                 foreach (var cell in row.Cells)
                     foreach (var p in cell.Paragraphs)
