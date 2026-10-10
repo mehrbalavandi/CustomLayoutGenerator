@@ -908,6 +908,45 @@ namespace CustomLayoutGenerator
                                       ?? _markRPr?.GetFirstChild<Border>()
                                       ?? (!string.IsNullOrEmpty(_markRStyle) ? GetRunBorderFromStyle(mainPart, _markRStyle) : null);
                     basePara.ListMarkerBorder = ParseBorder(_mBorder); // none/nil → null
+
+                    // 🐞 هندسه‌ی شماره مثلِ Word، برای اینکه فلاتر متنِ خطِ اول را دقیقاً
+                    // همان‌جایی شروع کند که Word شروع می‌کند (تورفتگیِ لیست‌ها در اپ
+                    // بیشتر از Word بود). فلاتر با این‌ها و عرضِ واقعیِ شماره تصمیم
+                    // می‌گیرد: شماره در بازه‌ی hanging جا می‌شود → متن از IndentLeft؛
+                    // وگرنه → tab stopِ بعدی.
+                    var _lvlRPr = Numbering(mainPart).LevelRunProperties(_np.Value.NumId, _np.Value.Level);
+
+                    // اندازه: سطحِ numbering ← نشانه‌ی پایانِ پاراگراف ← استایلِ کاراکتریِ
+                    // نشانه ← استایلِ پاراگراف (یا Normal) ← docDefaults.
+                    string _mSz = _lvlRPr?.GetFirstChild<FontSize>()?.Val?.Value
+                                  ?? _markRPr?.GetFirstChild<FontSize>()?.Val?.Value
+                                  ?? GetFontSizeFromStyleId(mainPart, _markRStyle)
+                                  ?? GetFontSizeFromStyleId(mainPart, _pStyleForMarker);
+                    if (string.IsNullOrEmpty(_mSz))
+                    {
+                        var _rPrDefM = mainPart?.StyleDefinitionsPart?.Styles?.DocDefaults?.RunPropertiesDefault?.RunPropertiesBaseStyle;
+                        _mSz = _rPrDefM?.FontSize?.Val?.Value;
+                    }
+                    if (!string.IsNullOrEmpty(_mSz) && double.TryParse(_mSz, System.Globalization.NumberStyles.Any,
+                            System.Globalization.CultureInfo.InvariantCulture, out double _mSzHalf))
+                        basePara.ListMarkerSize = _mSzHalf / 2.0;
+
+                    // فشردگیِ افقی (w:w): سطحِ numbering ← نشانه‌ی پایانِ پاراگراف. مثلاً
+                    // ۸۴٪ در Mindset 2؛ بدونِ آن «10:» در hangingِ ۱۴.۲pt جا نمی‌شد.
+                    var _mScale = _lvlRPr?.GetFirstChild<CharacterScale>() ?? _markRPr?.GetFirstChild<CharacterScale>();
+                    long? _scaleVal = _mScale?.Val?.Value; // IntegerValue → long
+                    if (_scaleVal.HasValue && _scaleVal.Value > 0 && _scaleVal.Value != 100)
+                        basePara.ListMarkerScale = _scaleVal.Value / 100.0;
+
+                    string _jc = Numbering(mainPart).LevelJustification(_np.Value.NumId, _np.Value.Level);
+                    if (_jc == "right" || _jc == "center") basePara.ListMarkerAlign = _jc;
+
+                    string _suff = Numbering(mainPart).LevelSuffix(_np.Value.NumId, _np.Value.Level);
+                    if (_suff == "space" || _suff == "nothing") basePara.ListSuffix = _suff;
+
+                    var _dts = mainPart?.DocumentSettingsPart?.Settings?.GetFirstChild<DefaultTabStop>()?.Val?.Value;
+                    if (_dts.HasValue && _dts.Value > 0 && _dts.Value != 720)
+                        basePara.ListTabStop = _dts.Value / 20.0;
                 }
 
                 // 🐞 صفحه ۱۵ تمرین ۹ (لیستِ تودرتو): تورفتگیِ لیست اغلب در
@@ -2004,6 +2043,11 @@ namespace CustomLayoutGenerator
                 ListMarkerColor = source.ListMarkerColor,        // 🐞 حفظِ رنگِ شماره هنگام clone
                 ListMarkerFill = source.ListMarkerFill,          // 🐞 حفظِ پس‌زمینه‌ی شماره هنگام clone
                 ListMarkerBorder = source.ListMarkerBorder != null ? new BorderDetail { Val = source.ListMarkerBorder.Val, Width = source.ListMarkerBorder.Width, Color = source.ListMarkerBorder.Color } : null, // 🐞 کادرِ شماره
+                ListMarkerSize = source.ListMarkerSize,           // 🐞 هندسه‌ی شماره مثلِ Word
+                ListMarkerScale = source.ListMarkerScale,
+                ListMarkerAlign = source.ListMarkerAlign,
+                ListSuffix = source.ListSuffix,
+                ListTabStop = source.ListTabStop,
                 KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlkLp
                 Spans = new List<SpanData>()
             };

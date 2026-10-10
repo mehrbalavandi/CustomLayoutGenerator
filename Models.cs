@@ -32,6 +32,12 @@ namespace CustomLayoutGenerator
         public string ListMarkerColor { get; set; }    // 🐞 رنگِ شماره/بولتِ لیست (هگز بدونِ #). قاعده‌ی Word: سطحِ numbering ← نشانه‌ی پایانِ پاراگراف ← استایل
         public string ListMarkerFill { get; set; }     // 🐞 پس‌زمینه‌ی شماره (هگز بدونِ #)، با همان قاعده؛ null = بدونِ پس‌زمینه
         public BorderDetail ListMarkerBorder { get; set; } // 🐞 کادرِ دورِ شماره، با همان قاعده؛ null = بدونِ کادر
+        // 🐞 هندسه‌ی شماره مثلِ Word (برای تورفتگیِ درست):
+        public double? ListMarkerSize { get; set; }    // اندازه‌ی فونتِ شماره (pt): سطحِ numbering ← نشانه‌ی پایانِ پاراگراف ← استایل ← docDefaults
+        public double? ListMarkerScale { get; set; }   // فشردگیِ افقیِ شماره (w:w/100)؛ null = ۱
+        public string ListMarkerAlign { get; set; }    // "right" | "center"؛ null = left
+        public string ListSuffix { get; set; }         // "space" | "nothing"؛ null = tab
+        public double? ListTabStop { get; set; }       // فاصله‌ی tab stopهای پیش‌فرضِ سند (pt)؛ null = ۳۶
         // 🐞 BlkLp: شماره‌ی لیست بیرونِ {blk} می‌ماند (دیده می‌شود) و فقط
         // متنِ بعد از شماره مخفی می‌شود — برخلافِ BlkPa که کلِ خط (شاملِ
         // شماره) را در یک بلاکِ مخفیِ ادغام‌شده می‌گذارد.

@@ -207,6 +207,34 @@ namespace CustomLayoutGenerator
             return LevelOf(abs, level)?.NumberingSymbolRunProperties;
         }
 
+        /// <summary>rPrِ سطحِ numbering (برای اندازه/فشردگیِ افقیِ شماره)؛ null اگر ندارد.</summary>
+        public NumberingSymbolRunProperties LevelRunProperties(int numId, int level) =>
+            LevelRunProps(numId, level);
+
+        /// <summary>
+        /// 🐞 چیزی که بعد از شماره می‌آید (w:suff): "tab" (پیش‌فرض)، "space" یا "nothing".
+        /// Word با این تصمیم می‌گیرد متنِ خطِ اول از کجا شروع شود.
+        /// </summary>
+        public string LevelSuffix(int numId, int level)
+        {
+            if (!_absByNum.TryGetValue(numId, out var abs)) return "tab";
+            var v = LevelOf(abs, level)?.LevelSuffix?.Val?.InnerText;
+            return string.IsNullOrEmpty(v) ? "tab" : v;
+        }
+
+        /// <summary>
+        /// 🐞 هم‌ترازیِ شماره نسبت به نقطه‌ی شروعش (w:lvlJc): "left" (پیش‌فرض)، "right"
+        /// یا "center". (start/end در Word جدید همان left/right برای متنِ LTR است.)
+        /// </summary>
+        public string LevelJustification(int numId, int level)
+        {
+            if (!_absByNum.TryGetValue(numId, out var abs)) return "left";
+            var v = LevelOf(abs, level)?.LevelJustification?.Val?.InnerText;
+            if (string.IsNullOrEmpty(v) || v == "start") return "left";
+            if (v == "end") return "right";
+            return v;
+        }
+
         /// <summary>هگزِ رنگ → بزرگ‌حرف بدونِ #؛ «auto» یا خالی → null.</summary>
         public static string NormalizeHex(string val)
         {
