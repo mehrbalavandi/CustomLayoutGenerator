@@ -2755,6 +2755,20 @@ namespace CustomLayoutGenerator
                 }
             }
 
+            // 🐞 Mindset 2 ص۵۷ (کلماتِ جدول وسطِ کلمه می‌شکستند): پاراگرافی که
+            // pStyle ندارد در Word استایلِ پیش‌فرض (Normal، ۱۱.۵pt) را دارد، ولی این‌جا
+            // فقط pStyleِ صریح خوانده می‌شد؛ اسپن بدونِ sz: به فلاتر می‌رسید و با
+            // پیش‌فرضِ ۱۴px (حدودِ ۲۲٪ بزرگ‌تر از Word) کشیده می‌شد. در سه کتاب
+            // حدودِ ۳۶۰۰ ران، تقریباً همه داخلِ جدول. ترتیبِ Word: … ← استایلِ
+            // پاراگراف (یا Normal) ← docDefaults.
+            if (string.IsNullOrEmpty(fontSizeStr) && string.IsNullOrEmpty(pPr?.ParagraphStyleId?.Val?.Value))
+                fontSizeStr = GetFontSizeFromStyleId(mainPart, DefaultParagraphStyleId(mainPart));
+            if (string.IsNullOrEmpty(fontSizeStr))
+            {
+                var _rPrDef = mainPart?.StyleDefinitionsPart?.Styles?.DocDefaults?.RunPropertiesDefault?.RunPropertiesBaseStyle;
+                fontSizeStr = _rPrDef?.FontSize?.Val?.Value ?? _rPrDef?.FontSizeComplexScript?.Val?.Value;
+            }
+
             if (!string.IsNullOrEmpty(fontSizeStr)) markers.Add($"sz:{fontSizeStr}");
             return markers;
         }
