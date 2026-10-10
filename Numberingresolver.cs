@@ -142,14 +142,21 @@ namespace CustomLayoutGenerator
         /// همین‌جاست، نه رانِ متن. (اگر پاراگراف خودش شماره را override کند
         /// موضوعِ دیگری است؛ در این کتاب‌ها شماره‌ها از سطحِ numbering می‌آیند.)
         /// </summary>
-        public bool LevelBold(int numId, int level)
+        public bool LevelBold(int numId, int level) => LevelBoldExplicit(numId, level) ?? false;
+
+        /// <summary>
+        /// بولد بودنِ نشانگر *فقط اگر* سطحِ numbering صراحتاً تعیینش کرده باشد
+        /// (&lt;w:lvl&gt;/&lt;w:rPr&gt;/&lt;w:b&gt;)؛ وگرنه null. 🐞 null یعنی تصمیم با «نشانه‌ی پایانِ
+        /// پاراگراف» و استایلِ پاراگراف است — قاعده‌ی Word (ParseParagraph).
+        /// </summary>
+        public bool? LevelBoldExplicit(int numId, int level)
         {
-            if (!_absByNum.TryGetValue(numId, out var abs)) return false;
+            if (!_absByNum.TryGetValue(numId, out var abs)) return null;
             var lvlDef = LevelOf(abs, level);
             var rpr = lvlDef?.NumberingSymbolRunProperties;
-            if (rpr == null) return false;
+            if (rpr == null) return null;
             var b = rpr.GetFirstChild<Bold>();
-            if (b == null) return false;
+            if (b == null) return null;
             return b.Val == null || b.Val.Value;
         }
 

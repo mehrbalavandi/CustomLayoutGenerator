@@ -829,7 +829,23 @@ namespace CustomLayoutGenerator
                     // می‌آید (که در این کتاب‌ها <w:b/> دارد)، نه از رانِ متن.
                     // فلاتر تا الان مارکر را با استایلِ ثابتِ non-bold رندر
                     // می‌کرد؛ حالا این فیلد را می‌خواند.
-                    basePara.ListMarkerBold = Numbering(mainPart).LevelBold(_np.Value.NumId, _np.Value.Level);
+                    // 🐞 قاعده‌ی Word برای قالبِ شماره‌ی خودکار: استایلِ پاراگراف ←
+                    // «نشانه‌ی پایانِ پاراگراف» (<w:pPr>/<w:rPr>) ← rPrِ سطحِ numbering،
+                    // که اگر صراحتاً چیزی بگوید برنده است. قبلاً فقط سطحِ numbering
+                    // خوانده می‌شد؛ پس شماره‌ای که بولدی‌اش از نشانه‌ی پایانِ پاراگراف
+                    // می‌آمد (Mindset 2 ص۵۳ تمرینِ ۰۶) در اپ regular دیده می‌شد.
+                    bool? _lvlBold = Numbering(mainPart).LevelBoldExplicit(_np.Value.NumId, _np.Value.Level);
+                    if (_lvlBold.HasValue)
+                    {
+                        basePara.ListMarkerBold = _lvlBold.Value;
+                    }
+                    else
+                    {
+                        var _markBold = p.ParagraphProperties?.ParagraphMarkRunProperties?.GetFirstChild<Bold>();
+                        basePara.ListMarkerBold = _markBold != null
+                            ? (_markBold.Val == null || _markBold.Val.Value)
+                            : IsBold(null, null, p.ParagraphProperties?.ParagraphStyleId?.Val?.Value, mainPart, false);
+                    }
                     basePara.ListMarkerColor = Numbering(mainPart).LevelColor(_np.Value.NumId, _np.Value.Level);
                 }
 
