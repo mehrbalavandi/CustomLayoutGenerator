@@ -272,9 +272,11 @@ namespace CustomLayoutGenerator
                         var paraDataList = ParseParagraph(paragraph, wordDoc.MainDocumentPart, resolver, outputDir, false);
 
                         // 🌟 فیلتر پاراگراف‌های زباله: حذف پاراگراف‌هایی که فقط کاراکترهای \n یا فضای خالی دارند
+                        // 🐞 پاراگرافِ «فقط‌شماره»ی لیست حذف نمی‌شود (Word شماره‌اش را نشان می‌دهد)
                         paraDataList.RemoveAll(p =>
                             p.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
-                            p.StartMs == null);
+                            p.StartMs == null &&
+                            string.IsNullOrEmpty(p.ListMarker));
 
                         if (paraDataList.Count > 0)
                         {
@@ -978,6 +980,34 @@ namespace CustomLayoutGenerator
             // یک). مودال بخش‌های استایل‌دار را از InnerSpans حفظ می‌کند.
             MergeConsecutiveInlineBlanks(basePara.Spans);
 
+            // 🐞 پاراگرافِ لیستیِ «فقط‌شماره» (Mindset 2 ص۵۳ تمرینِ ۰۶: ستونِ اولِ
+            // جدول فقط شماره‌ی خودکارِ ۱ تا ۶ دارد، بدونِ هیچ متنی): Word شماره‌ی
+            // یک پاراگرافِ خالیِ شماره‌دار را نشان می‌دهد، ولی این پاراگراف هیچ
+            // اسپنی نداشت و فیلترِ «پاراگرافِ خالی» دورش می‌ریخت. یک اسپنِ متنیِ
+            // خالی می‌سازیم که فونت/اندازه‌ی واقعیِ همان پاراگراف را دارد (از
+            // نشانه‌ی پایانِ پاراگراف و زنجیره‌ی استایل)، تا فلاتر شماره را با
+            // همان اندازه‌ی متنِ اطراف بکشد.
+            if (!basePara.Spans.Any() && !string.IsNullOrEmpty(basePara.ListMarker))
+            {
+                var phantomProps = new RunProperties();
+                var markProps = p.ParagraphProperties?.ParagraphMarkRunProperties;
+                if (markProps != null)
+                {
+                    var mFonts = markProps.GetFirstChild<RunFonts>();
+                    var mSize = markProps.GetFirstChild<FontSize>();
+                    var mSizeCs = markProps.GetFirstChild<FontSizeComplexScript>();
+                    if (mFonts != null) phantomProps.Append(mFonts.CloneNode(true));
+                    if (mSize != null) phantomProps.Append(mSize.CloneNode(true));
+                    if (mSizeCs != null) phantomProps.Append(mSizeCs.CloneNode(true));
+                }
+                basePara.Spans.Add(new SpanData
+                {
+                    Type = "text",
+                    Content = "",
+                    Markers = ExtractRunMarkers(new Run(phantomProps), p.ParagraphProperties, mainPart)
+                });
+            }
+
             string combinedPattern = @"(\[AudioStart:\s*.+?\]|\[(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[\d+\]|\[AudioEnd:\s*(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[AudioEnd\])";
 
             // 🐞 حالتِ جدید: به‌جای شکستنِ متن به چند پاراگرافِ جدا (که فقط
@@ -1617,9 +1647,12 @@ namespace CustomLayoutGenerator
 
                             var cellParaDataList = ParseParagraph(p, mainPart, resolver, outputDir, true, conditionalBold: cellConditionalBold);
 
+                            // 🐞 پاراگرافِ «فقط‌شماره»ی لیست حذف نمی‌شود (Mindset 2 ص۵۳ تمرینِ ۰۶:
+                            // ستونِ شماره‌ی ۱ تا ۶ که Word نشانش می‌دهد).
                             cellParaDataList.RemoveAll(pr =>
                                 pr.Spans.All(s => s.Type == "text" && string.IsNullOrWhiteSpace(s.Content)) &&
-                                pr.StartMs == null);
+                                pr.StartMs == null &&
+                                string.IsNullOrEmpty(pr.ListMarker));
 
                             if (cellParaDataList.Count > 0)
                             {
