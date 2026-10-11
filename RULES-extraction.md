@@ -70,9 +70,16 @@
 | O-1 | شماره‌ی صفحه = تعدادِ عناصرِ سطحِ بالای body که page break دارند (از شماره‌ی شروعِ دلخواه). نامِ فایل از همین شماره است. | |
 | O-2 | `Version` هر صفحه هَشِ محتواست؛ صفحه‌ای که عوض نشده دوباره دانلود نمی‌شود. | `ShortHash` |
 | O-3 | ساختار: `index.json`، `pages/page_NNNN.json`، `audio_scripts/`، `images/`، `audio/`. | `Bookoutputwriter.cs` |
+| O-4 | **فهرستِ ساختاری (`Outline` در index.json)** از روی **سطحِ ساختارِ خودِ Word** (Outline Level)، نه نامِ استایل یا متنِ خاصِ یک کتاب. سطح از `<w:outlineLvl>`ِ مستقیمِ پاراگراف، وگرنه از استایلِ پاراگراف (یا استایلِ پیش‌فرض) و زنجیره‌ی basedOn خوانده می‌شود؛ مقدارِ Word صفرمبناست و ۹ یعنی «متنِ بدنه». پس «Nav 1»/«Nav 2»، «Heading 1/2» یا هر استایلی که Outline Level داشته باشد کار می‌کند؛ همان درختی است که Navigation Paneِ Word نشان می‌دهد. هر گره: `Title`، `Level` (یک‌مبنا)، `PageNumber`، `ParaIndex` (اندیسِ پاراگرافِ بیرونی، مثلِ AudioLinksIndex)، `AtPageTop`، `Children`. عنوان = متنِ دیدنی (رانِ زیرِ ۲pt حذف). تیترِ هم‌سطح و هم‌عنوان با گره‌ی بازِ فعلی (بنرِ تکراری) گره‌ی تازه نمی‌سازد. تیترِ داخلِ سلولِ جدول حساب می‌شود؛ محتوای پنهانِ جواب‌ها نه. `AtPageTop`: قبل از تیتر در همان صفحه روی‌هم ≤ ۸۰ نویسه‌ی دیدنی و بی‌عکس ⇒ پرش به بالای صفحه. سطح فقط روی اولین تکه‌ی یک پاراگرافِ Word گذاشته می‌شود و در JSONِ صفحه نوشته نمی‌شود (`[JsonIgnore]`، هَشِ صفحه‌ها عوض نمی‌شود). | `BuildOutline`، `EffectiveOutlineLevel` |
 
 ## تله‌ها (برای هر قانونِ تازه)
 1. فیلدِ تازه در `ParagraphData` ⇒ در `CloneParagraphProperties` هم. فیلدِ تازه در
    `SpanData` ⇒ در `CloneSpan` هم. وگرنه در ادغام‌ها بی‌صدا گم می‌شود.
 2. enumهای OpenXML: `.Val.InnerText`، نه `.ToString()`.
 3. قبل از نوشتنِ نوعِ یک پراپرتیِ OpenXML (مثلاً `CharacterScale.Val` = `IntegerValue` = long)، سورسِ SDK را چک کنید.
+
+## راهنمای نویسنده‌ی سند (Word)
+- برای فهرستِ ساختاری، به تیترهای اصلی استایلِ **Nav 1** و به زیرتیترها **Nav 2** بدهید (یا هر استایلی که در Paragraph ← Outline level سطح دارد).
+- استایل‌های Nav بر پایه‌ی Normal‌اند و فقط سطحِ ساختار دارند؛ ظاهرِ متن عوض نمی‌شود.
+- برای بررسی: View ← Navigation Pane؛ همان درخت در اپ دیده می‌شود.
+- در Mindset: اولین بنرِ «UNIT/0X: …» هر Unit ← Nav 1؛ تیترِ READING/WRITING/LISTENING/SPEAKING ← Nav 2.

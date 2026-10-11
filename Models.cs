@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using Newtonsoft.Json;
 
 namespace CustomLayoutGenerator
 {
@@ -37,6 +38,15 @@ namespace CustomLayoutGenerator
         public double? ListMarkerScale { get; set; }   // فشردگیِ افقیِ شماره (w:w/100)؛ null = ۱
         public string ListMarkerAlign { get; set; }    // "right" | "center"؛ null = left
         public string ListSuffix { get; set; }         // "space" | "nothing"؛ null = tab
+        /// <summary>
+        /// 🌟 سطحِ ساختار (Outline Level) از Word: ۱ = بالاترین (مثلاً Unit)، ۲ = زیرش
+        /// (مثلاً مهارت)، … null = متنِ معمولی. از pPrِ مستقیم یا زنجیره‌ی استایلِ
+        /// پاراگراف (استایل‌های «Nav 1»/«Nav 2» یا Heading 1/2/…). فقط برای ساختنِ
+        /// Outlineِ index.json است و در JSONِ صفحه نوشته نمی‌شود (هَشِ صفحه‌ها عوض
+        /// نمی‌شود). قانونِ O-4 در RULES-extraction.md.
+        /// </summary>
+        [JsonIgnore]
+        public int? OutlineLevel { get; set; }
         public double? ListTabStop { get; set; }       // فاصله‌ی tab stopهای پیش‌فرضِ سند (pt)؛ null = ۳۶
         // 🐞 BlkLp: شماره‌ی لیست بیرونِ {blk} می‌ماند (دیده می‌شود) و فقط
         // متنِ بعد از شماره مخفی می‌شود — برخلافِ BlkPa که کلِ خط (شاملِ

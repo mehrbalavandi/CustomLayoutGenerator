@@ -196,7 +196,7 @@ numbering است، نه در رانِ متن** — `LevelBold` و `LevelColor` �
 خروجی را می‌نویسد:
 
 ```
-index.json          ← فهرستِ صفحات + AudioScripts + Interactives
+index.json          ← فهرستِ صفحات + AudioScripts + Interactives + Outline (قانونِ O-4)
 pages/page_0001.json
 audio_scripts/…
 images/  audio/

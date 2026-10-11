@@ -822,7 +822,46 @@ namespace CustomLayoutGenerator
             return result;
         }
 
+        /// <summary>
+        /// 🌟 پوسته‌ی ParseParagraph: بعد از تجزیه، سطحِ ساختارِ Word (Outline Level)
+        /// را فقط روی *اولین* تکه‌ی خروجی می‌گذارد — یک پاراگرافِ Word ممکن است به
+        /// چند ParagraphData شکسته شود و تیتر نباید چند بار در Outline بیاید.
+        /// </summary>
         public List<ParagraphData> ParseParagraph(Paragraph p, MainDocumentPart mainPart, FontResolver resolver, string outputDir, bool inTable = false, bool audioMarkersAsSpans = false, bool conditionalBold = false)
+        {
+            var list = ParseParagraphCore(p, mainPart, resolver, outputDir, inTable, audioMarkersAsSpans, conditionalBold);
+            int? level = EffectiveOutlineLevel(p, mainPart);
+            if (level.HasValue && list.Count > 0) list[0].OutlineLevel = level;
+            return list;
+        }
+
+        /// <summary>
+        /// 🌟 سطحِ ساختارِ مؤثرِ پاراگراف، مثلِ Word: اول &lt;w:outlineLvl&gt;ِ مستقیم،
+        /// بعد استایلِ پاراگراف (یا استایلِ پیش‌فرض) و زنجیره‌ی basedOn. مقدارِ Word
+        /// صفرمبناست (۰ = سطحِ ۱)؛ ۹ یعنی «متنِ بدنه» = بدونِ سطح. خروجی یک‌مبنا یا null.
+        /// </summary>
+        private int? EffectiveOutlineLevel(Paragraph p, MainDocumentPart mainPart)
+        {
+            int? Norm(int? v) => (v.HasValue && v.Value >= 0 && v.Value <= 8) ? v.Value + 1 : (int?)null;
+
+            var direct = p.ParagraphProperties?.OutlineLevel?.Val?.Value;
+            if (direct.HasValue) return Norm(direct);
+
+            var styles = mainPart?.StyleDefinitionsPart?.Styles;
+            string styleId = p.ParagraphProperties?.ParagraphStyleId?.Val?.Value ?? DefaultParagraphStyleId(mainPart);
+            int guard = 0;
+            while (styles != null && !string.IsNullOrEmpty(styleId) && guard++ < 20)   // گاردِ basedOnِ چرخه‌ای
+            {
+                var style = styles.Elements<Style>().FirstOrDefault(s => s.StyleId == styleId);
+                if (style == null) break;
+                var v = style.StyleParagraphProperties?.OutlineLevel?.Val?.Value;
+                if (v.HasValue) return Norm(v);
+                styleId = style.BasedOn?.Val?.Value;
+            }
+            return null;
+        }
+
+        private List<ParagraphData> ParseParagraphCore(Paragraph p, MainDocumentPart mainPart, FontResolver resolver, string outputDir, bool inTable, bool audioMarkersAsSpans, bool conditionalBold)
         {
             var basePara = new ParagraphData();
 
@@ -2075,6 +2114,7 @@ namespace CustomLayoutGenerator
                 ListMarkerAlign = source.ListMarkerAlign,
                 ListSuffix = source.ListSuffix,
                 ListTabStop = source.ListTabStop,
+                OutlineLevel = source.OutlineLevel,
                 KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlkLp
                 Spans = new List<SpanData>()
             };

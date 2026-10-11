@@ -122,7 +122,11 @@ namespace CustomLayoutGenerator
                 // چون این کار نیازِ به لودِ کاملِ کتاب دارد، مانعِ اصلیِ
                 // لودِ تنبل/صفحه‌به‌صفحه بود. حالا از قبل، همین‌جا در زمانِ
                 // استخراج، محاسبه و در index.json نوشته می‌شود.
-                AudioLinksIndex = BuildAudioLinksIndex(pages)
+                AudioLinksIndex = BuildAudioLinksIndex(pages),
+                // 🌟 فهرستِ ساختاریِ کتاب (Unit ← مهارت، فصل ← بخش، …) از روی
+                // سطحِ ساختارِ Word — قانونِ O-4. null (و در JSON حذف) اگر سند هیچ
+                // تیترِ دارای سطح نداشته باشد.
+                Outline = BuildOutline(pages)
             };
 
             string indexJson = JsonConvert.SerializeObject(index, Formatting.Indented, Settings);
@@ -190,6 +194,112 @@ namespace CustomLayoutGenerator
             return result;
         }
 
+        /// <summary>
+        /// 🌟 قانونِ O-4: درختِ تیترها از روی ParagraphData.OutlineLevel.
+        /// - ترتیب = ترتیبِ سند؛ تیترِ داخلِ سلولِ جدول هم حساب می‌شود (ParaIndex =
+        ///   اندیسِ پاراگرافِ *بیرونی*، مثلِ AudioLinksIndex). محتوای پنهانِ جواب‌ها
+        ///   (HiddenParagraphs) حساب نمی‌شود.
+        /// - عنوان = متنِ دیدنیِ پاراگراف؛ رانِ کوچک‌تر از ۲pt (متنِ نامرئیِ کمکی،
+        ///   مثلِ «READING»ِ ۱pt در Mindset 1) کنار گذاشته می‌شود.
+        /// - تیترِ تکراری: اگر تیتری با همان سطح و همان عنوانِ گره‌ی بازِ فعلی بیاید
+        ///   (بنرِ تکرارشونده‌ی بالای صفحه‌ها)، ادامه‌ی همان گره است، نه گره‌ی تازه.
+        /// - AtPageTop: اگر قبل از تیتر در همان صفحه فقط چیزهای کوتاه آمده باشد (روی‌هم
+        ///   حداکثر ۸۰ نویسه‌ی دیدنی و هیچ عکسی — مثلاً بنرِ «UNIT/01: …»)، پرش به این
+        ///   تیتر یعنی پرش به بالای صفحه؛ وگرنه اپ خودِ پاراگرافِ تیتر را نشان می‌دهد.
+        /// </summary>
+        private static List<OutlineEntry> BuildOutline(List<PageData> pages)
+        {
+            var roots = new List<OutlineEntry>();
+            var stack = new List<OutlineEntry>();   // مسیرِ گره‌های باز از ریشه
+
+            bool atPageTop = false;   // برای پاراگرافِ بیرونیِ فعلی (پایین‌تر حساب می‌شود)
+
+            void Visit(ParagraphData para, int pageNumber, int topParaIndex)
+            {
+                if (para.OutlineLevel.HasValue)
+                {
+                    string title = OutlineTitle(para);
+                    if (!string.IsNullOrEmpty(title))
+                        Add(new OutlineEntry
+                        {
+                            Title = title,
+                            Level = para.OutlineLevel.Value,
+                            PageNumber = pageNumber,
+                            ParaIndex = topParaIndex,
+                            AtPageTop = atPageTop ? true : (bool?)null
+                        });
+                }
+                foreach (var s in para.Spans ?? new List<SpanData>())
+                {
+                    if (s.Type != "table" || s.TableRows == null) continue;
+                    foreach (var row in s.TableRows)
+                        foreach (var cell in row.Cells)
+                            foreach (var p in cell.Paragraphs)
+                                Visit(p, pageNumber, topParaIndex);
+                }
+            }
+
+            void Add(OutlineEntry e)
+            {
+                while (stack.Count > 0 && stack[stack.Count - 1].Level > e.Level)
+                    stack.RemoveAt(stack.Count - 1);
+                if (stack.Count > 0)
+                {
+                    var top = stack[stack.Count - 1];
+                    if (top.Level == e.Level && top.Title == e.Title) return;   // تیترِ تکراری
+                    if (top.Level == e.Level) stack.RemoveAt(stack.Count - 1);
+                }
+                if (stack.Count == 0) roots.Add(e);
+                else (stack[stack.Count - 1].Children ??= new List<OutlineEntry>()).Add(e);
+                stack.Add(e);
+            }
+
+            foreach (var page in pages)
+            {
+                int charsBefore = 0;
+                bool imageBefore = false;
+                for (int i = 0; i < page.Paragraphs.Count; i++)
+                {
+                    atPageTop = !imageBefore && charsBefore <= 80;
+                    Visit(page.Paragraphs[i], page.PageNumber, i);
+                    Measure(page.Paragraphs[i].Spans, ref charsBefore, ref imageBefore);
+                }
+            }
+
+            return roots.Count > 0 ? roots : null;
+        }
+
+        /// <summary>تعدادِ نویسه‌های دیدنی و وجودِ عکس در اسپن‌ها (به‌همراهِ جدول‌های تودرتو).</summary>
+        private static void Measure(List<SpanData> spans, ref int chars, ref bool image)
+        {
+            if (spans == null) return;
+            foreach (var s in spans)
+            {
+                if (s.Type == "image") image = true;
+                else if (s.Type == "text" && s.Content != null) chars += s.Content.Trim().Length;
+                else if (s.Type == "table" && s.TableRows != null)
+                    foreach (var row in s.TableRows)
+                        foreach (var cell in row.Cells)
+                            foreach (var p in cell.Paragraphs)
+                                Measure(p.Spans, ref chars, ref image);
+            }
+        }
+
+        private static string OutlineTitle(ParagraphData para)
+        {
+            var sb = new StringBuilder();
+            foreach (var s in para.Spans ?? new List<SpanData>())
+            {
+                if (s.Type != "text" || string.IsNullOrEmpty(s.Content)) continue;
+                string sz = s.Markers?.FirstOrDefault(m => m.StartsWith("sz:"));
+                if (sz != null && double.TryParse(sz.Substring(3), System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out double halfPoints) && halfPoints < 4)
+                    continue;   // کوچک‌تر از ۲pt: نامرئی
+                sb.Append(s.Content);
+            }
+            return Regex.Replace(sb.ToString(), @"\s+", " ").Trim();
+        }
+
         private static string ShortHash(string content)
         {
             using (var sha = SHA1.Create())
@@ -210,6 +320,21 @@ namespace CustomLayoutGenerator
         public object Interactives { get; set; }                 // null اگر هنوز تولید نشده
         public List<AudioScriptTrackEntry> AudioScripts { get; set; }  // سطح کتاب — یک اشاره‌گر به‌ازای هر فایلِ صوتی (در audio_scripts/)
         public List<AudioLinkEntry> AudioLinksIndex { get; set; }  // سطح کتاب — کجای متن دکمه‌ی صوتی هست
+        public List<OutlineEntry> Outline { get; set; }            // 🌟 درختِ تیترها (قانونِ O-4)؛ null = ندارد
+    }
+
+    /// <summary>
+    /// 🌟 یک گره‌ی فهرستِ ساختاری. Level یک‌مبناست (۱ = بالاترین)؛ PageNumber و
+    /// ParaIndex همان قراردادِ AudioLinksIndex (اندیسِ پاراگرافِ بیرونیِ صفحه).
+    /// </summary>
+    public class OutlineEntry
+    {
+        public string Title { get; set; }
+        public int Level { get; set; }
+        public int PageNumber { get; set; }
+        public int ParaIndex { get; set; }
+        public bool? AtPageTop { get; set; }               // true = پرش به بالای صفحه؛ null = به خودِ پاراگراف
+        public List<OutlineEntry> Children { get; set; }   // null اگر برگ است
     }
 
     public class PageIndexEntry
