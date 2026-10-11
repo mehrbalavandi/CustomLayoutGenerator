@@ -1192,53 +1192,82 @@ namespace CustomLayoutGenerator
                 if (!basePara.Spans.Any())
                     return new List<ParagraphData> { onlyPara };
 
+                // 🐞 قانونِ A-1: مارکرِ زمانی ممکن است بینِ دو ران شکسته شده باشد —
+                // مثلاً «Let's[» در یک ران و «2660] » در رانِ بعدی (Mindset 1، اسکریپت‌های
+                // ۰۹ تا ۱۲؛ Word یا ابزارِ مارکرگذاری ران را وسطِ مارکر بریده). قبلاً
+                // regex روی محتوای *هر اسپن جداگانه* اجرا می‌شد، پس این مارکرها پیدا
+                // نمی‌شدند: متنِ «[2660]» در اپ دیده می‌شد و چون هیچ مرزِ زمانی‌ای
+                // ساخته نمی‌شد، کلِ پاراگراف یک بازه بود و یکجا هایلایت می‌شد.
+                // حالا مارکرها روی متنِ پیوسته‌ی همه‌ی اسپن‌های متنیِ پاراگراف پیدا
+                // می‌شوند و بعد هر اسپن (با همان استایلِ خودش) سرِ مرزِ مارکرها بریده
+                // و نویسه‌های خودِ مارکر حذف می‌شوند.
+                string markerPattern = @"\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2}(?:\.\d+)?)\]|\[(\d+)\]";
+                var fullText = new System.Text.StringBuilder();
+                var textRanges = new Dictionary<SpanData, (int Start, int End)>();
                 foreach (var span in basePara.Spans)
                 {
-                    if (span.Type != "text" || string.IsNullOrEmpty(span.Content))
+                    if (span.Type != "text" || string.IsNullOrEmpty(span.Content)) continue;
+                    int s0 = fullText.Length;
+                    fullText.Append(span.Content);
+                    textRanges[span] = (s0, fullText.Length);
+                }
+                var markers = Regex.Matches(fullText.ToString(), markerPattern)
+                    .Cast<Match>()
+                    .Select(m => (Start: m.Index, End: m.Index + m.Length, Ms: MarkerMs(m)))
+                    .ToList();
+
+                foreach (var span in basePara.Spans)
+                {
+                    if (!textRanges.TryGetValue(span, out var range))
                     {
-                        onlyPara.Spans.Add(span);
+                        onlyPara.Spans.Add(span);   // عکس، جدول، اسپنِ خالی، …
                         continue;
                     }
 
-                    var msParts = Regex.Split(span.Content, combinedPattern, RegexOptions.IgnoreCase);
-                    foreach (var part in msParts)
+                    int cursor = range.Start;
+                    while (cursor < range.End)
                     {
-                        if (string.IsNullOrEmpty(part)) continue;
+                        // اولین مارکری که هنوز تمام نشده و تا این‌جا رسیده
+                        var next = markers.FirstOrDefault(m => m.End > cursor);
+                        bool hasNext = next.End > cursor;
 
-                        var timeMatch2 = Regex.Match(part, @"\[(?:(\d{1,2}):)?(\d{1,2}):(\d{2}(?:\.\d+)?)\]");
-                        var msMatch2 = Regex.Match(part, @"\[(\d+)\]");
-
-                        if (timeMatch2.Success || msMatch2.Success)
+                        if (!hasNext || next.Start >= range.End)
                         {
-                            int ms;
-                            if (timeMatch2.Success)
-                            {
-                                int h = timeMatch2.Groups[1].Success ? int.Parse(timeMatch2.Groups[1].Value) : 0;
-                                int m = int.Parse(timeMatch2.Groups[2].Value);
-                                double s = double.Parse(timeMatch2.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
-                                ms = (int)((h * 3600 + m * 60 + s) * 1000);
-                            }
-                            else
-                            {
-                                ms = int.Parse(msMatch2.Groups[1].Value);
-                            }
-
-                            // بستنِ همه‌ی اسپن‌های معلقِ بازه‌ی قبلی با همین زمان
-                            // (ممکن است چند اسپنِ متفاوت‌استایل باشند، نه فقط یکی)
-                            foreach (var pendingSpan in _pendingAudioSpans) pendingSpan.EndMs = ms;
-                            _pendingAudioSpans.Clear();
-                            _pendingAudioSpanStartMs = ms;
+                            AddAudioText(span, fullText.ToString(cursor, range.End - cursor));
+                            cursor = range.End;
+                        }
+                        else if (next.Start > cursor)
+                        {
+                            AddAudioText(span, fullText.ToString(cursor, next.Start - cursor));
+                            cursor = next.Start;
                         }
                         else
                         {
-                            var newSpan = CloneSpan(span);
-                            newSpan.Content = (onlyPara.Spans.Count == 0) ? part.TrimStart() : part;
-                            if (string.IsNullOrEmpty(newSpan.Content)) continue;
-                            newSpan.StartMs = _pendingAudioSpanStartMs;
-                            onlyPara.Spans.Add(newSpan);
-                            _pendingAudioSpans.Add(newSpan);
+                            // داخلِ یک مارکر: نویسه‌هایش نمایش داده نمی‌شوند. رویدادِ زمانی
+                            // فقط یک‌بار، در اسپنی که مارکر در آن *تمام* می‌شود، اعمال می‌شود.
+                            int stop = Math.Min(next.End, range.End);
+                            if (next.End <= range.End)
+                            {
+                                // بستنِ همه‌ی اسپن‌های معلقِ بازه‌ی قبلی با همین زمان
+                                // (ممکن است چند اسپنِ متفاوت‌استایل باشند، نه فقط یکی)
+                                foreach (var pendingSpan in _pendingAudioSpans) pendingSpan.EndMs = next.Ms;
+                                _pendingAudioSpans.Clear();
+                                _pendingAudioSpanStartMs = next.Ms;
+                            }
+                            cursor = stop;
                         }
                     }
+                }
+
+                void AddAudioText(SpanData source, string part)
+                {
+                    if (string.IsNullOrEmpty(part)) return;
+                    var newSpan = CloneSpan(source);
+                    newSpan.Content = (onlyPara.Spans.Count == 0) ? part.TrimStart() : part;
+                    if (string.IsNullOrEmpty(newSpan.Content)) return;
+                    newSpan.StartMs = _pendingAudioSpanStartMs;
+                    onlyPara.Spans.Add(newSpan);
+                    _pendingAudioSpans.Add(newSpan);
                 }
 
                 if (onlyPara.Spans.Count == 0)
@@ -2250,6 +2279,19 @@ namespace CustomLayoutGenerator
 
             var c = u.Color?.Value;
             if (!string.IsNullOrEmpty(c) && c != "auto") color = c;
+        }
+
+        /// <summary>
+        /// زمانِ یک مارکرِ [mm:ss.f] / [h:mm:ss] یا [میلی‌ثانیه] به میلی‌ثانیه (گروه‌های
+        /// regexِ قانونِ A-1: ۱=ساعت، ۲=دقیقه، ۳=ثانیه، ۴=میلی‌ثانیه).
+        /// </summary>
+        private static int MarkerMs(Match m)
+        {
+            if (m.Groups[4].Success) return int.Parse(m.Groups[4].Value);
+            int h = m.Groups[1].Success ? int.Parse(m.Groups[1].Value) : 0;
+            int min = int.Parse(m.Groups[2].Value);
+            double sec = double.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+            return (int)((h * 3600 + min * 60 + sec) * 1000);
         }
 
         private SpanData CloneSpan(SpanData source)
