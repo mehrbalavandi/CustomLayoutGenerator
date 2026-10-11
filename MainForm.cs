@@ -887,6 +887,8 @@ namespace CustomLayoutGenerator
                                 ?? NumberingResolver.NormalizeHex(GetColorFromStyleId(mainPart, _pStyleForMarker));
                     }
 
+                    // ... بعد از تعیینِ پس‌زمینه‌ی شماره (پایین‌تر) رنگِ «خودکار» روی زمینه‌ی تیره
+                    // سفید می‌شود — همان قاعده‌ی متن (RULES E-9).
                     // 🐞 پس‌زمینه و کادرِ شماره، باز با همان قاعده (سطحِ numbering ←
                     // نشانه‌ی پایانِ پاراگراف ← استایلِ کاراکتریِ نشانه). Mindset 2 ص۱۱۷ و
                     // Mindset 3 ص۱۲۸: شماره‌ی سفید روی کادرِ آبی؛ بدونِ این دو، شماره‌ی
@@ -908,6 +910,16 @@ namespace CustomLayoutGenerator
                                       ?? _markRPr?.GetFirstChild<Border>()
                                       ?? (!string.IsNullOrEmpty(_markRStyle) ? GetRunBorderFromStyle(mainPart, _markRStyle) : null);
                     basePara.ListMarkerBorder = ParseBorder(_mBorder); // none/nil → null
+
+                    // 🐞 رنگِ «خودکار»ِ شماره روی پس‌زمینه‌ی تیره سفید است، مثلِ متن (RULES E-9):
+                    // پس‌زمینه = پس‌زمینه‌ی خودِ شماره ← سایه‌ی پاراگراف ← سایه‌ی سلول.
+                    if (string.IsNullOrEmpty(basePara.ListMarkerColor))
+                    {
+                        string _mBg = basePara.ListMarkerFill
+                                      ?? ParagraphShadingFill(p.ParagraphProperties, mainPart)
+                                      ?? CellShadingFill(p);
+                        if (IsDarkBackground(_mBg)) basePara.ListMarkerColor = "FFFFFF";
+                    }
 
                     // 🐞 هندسه‌ی شماره مثلِ Word، برای اینکه فلاتر متنِ خطِ اول را دقیقاً
                     // همان‌جایی شروع کند که Word شروع می‌کند (تورفتگیِ لیست‌ها در اپ
@@ -1445,13 +1457,28 @@ namespace CustomLayoutGenerator
                 runLetterSpacing = resolvedCharSpacing.Val.Value / 20.0;
 
             string runTextColor = null;
-            if (run.RunProperties?.Color?.Val?.Value != null && run.RunProperties.Color.Val.Value != "auto")
+            // 🐞 «auto»ِ صریح روی خودِ ران یعنی رنگِ خودکار (نه «برو سراغِ استایل»).
+            bool runColorExplicitAuto = run.RunProperties?.Color?.Val?.Value != null &&
+                                        run.RunProperties.Color.Val.Value.Equals("auto", StringComparison.OrdinalIgnoreCase);
+            if (run.RunProperties?.Color?.Val?.Value != null && !runColorExplicitAuto)
                 runTextColor = run.RunProperties.Color.Val.Value;
 
-            if (string.IsNullOrEmpty(runTextColor))
+            if (string.IsNullOrEmpty(runTextColor) && !runColorExplicitAuto)
             {
                 if (!string.IsNullOrEmpty(runStyleId)) runTextColor = GetColorFromStyleId(mainPart, runStyleId);
                 if (string.IsNullOrEmpty(runTextColor) && pStyleId != null) runTextColor = GetColorFromStyleId(mainPart, pStyleId);
+            }
+
+            // 🐞 رنگِ «خودکار»ِ Word روی پس‌زمینه‌ی تیره سفید است (Mindset 2 ص۸۸: «Advantages»
+            // و «Disadvantages» روی سلولِ 202528 در Word سفیدند، ولی چون ران رنگی
+            // نداشت، فلاتر رنگِ پیش‌فرضِ تیره‌ی خودش را می‌کشید). پس‌زمینه‌ی مؤثر مثلِ
+            // Word: سایه/هایلایتِ خودِ ران ← سایه‌ی پاراگراف ← سایه‌ی سلول. (قاعده‌ی RULES E-9)
+            if (string.IsNullOrEmpty(runTextColor) || runTextColor.Equals("auto", StringComparison.OrdinalIgnoreCase))
+            {
+                string _bg = runShading
+                             ?? ParagraphShadingFill(pPr, mainPart)
+                             ?? CellShadingFill(run);
+                runTextColor = IsDarkBackground(_bg) ? "FFFFFF" : null;
             }
 
             // 🌟 جزئیاتِ زیرخط (نوع/ضخامت/رنگ). مارکرِ "u" جدا و مثلِ قبل در
@@ -2310,6 +2337,51 @@ namespace CustomLayoutGenerator
                 style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
             }
             return null;
+        }
+
+        /// <summary>
+        /// 🐞 آیا پس‌زمینه آن‌قدر تیره است که Word رنگِ «خودکار»ِ متن را سفید کند؟
+        /// همان آستانه‌ای که LibreOffice برای تقلیدِ Word به کار می‌برد
+        /// (Color::IsDark): روشنایی نسبیِ WCAG ≤ ۸۷/۲۵۵ (حدودِ ۰.۳۴).
+        /// </summary>
+        private static bool IsDarkBackground(string hex)
+        {
+            if (string.IsNullOrEmpty(hex)) return false;
+            hex = hex.TrimStart('#');
+            if (hex.Length != 6 || hex.Equals("auto", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!int.TryParse(hex, System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture, out int rgb)) return false;
+            double Lin(int v)
+            {
+                double c = v / 255.0;
+                return c < 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+            }
+            double lum = 0.2126 * Lin((rgb >> 16) & 0xFF) + 0.7152 * Lin((rgb >> 8) & 0xFF) + 0.0722 * Lin(rgb & 0xFF);
+            return lum * 255.0 <= 87.0;
+        }
+
+        /// <summary>
+        /// 🐞 سایه‌ی مستقیمِ پاراگراف (w:pPr/w:shd). null اگر ندارد/auto.
+        /// عمداً فقط سایه‌ی مستقیم — همان که به FillColorِ پاراگراف می‌رود و اپ واقعاً
+        /// می‌کشد؛ وگرنه ممکن بود متن روی پس‌زمینه‌ای که کشیده نمی‌شود سفید شود.
+        /// (در سه کتاب هیچ استایلِ پاراگرافی سایه ندارد.)
+        /// </summary>
+        private static string ParagraphShadingFill(ParagraphProperties pPr, MainDocumentPart mainPart)
+        {
+            string fill = pPr?.Shading?.Fill?.Value;
+            return string.IsNullOrEmpty(fill) || fill.Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : fill;
+        }
+
+        /// <summary>🐞 سایه‌ی نزدیک‌ترین سلولِ جدولِ دربرگیرنده (w:tcPr/w:shd). null اگر ندارد/auto.</summary>
+        private static string CellShadingFill(OpenXmlElement element)
+        {
+            var cell = element?.Ancestors<DocumentFormat.OpenXml.Wordprocessing.TableCell>().FirstOrDefault();
+            var fill = cell?.TableCellProperties?.Shading?.Fill?.Value;
+            // سلولِ بی‌سایه → سایه‌ی کلِ جدول (w:tblPr/w:shd)، که اپ هم می‌کشد.
+            if (cell != null && cell.TableCellProperties?.Shading == null)
+                fill = cell.Ancestors<DocumentFormat.OpenXml.Wordprocessing.Table>().FirstOrDefault()
+                    ?.GetFirstChild<TableProperties>()?.GetFirstChild<Shading>()?.Fill?.Value;
+            return string.IsNullOrEmpty(fill) || fill.Equals("auto", StringComparison.OrdinalIgnoreCase) ? null : fill;
         }
 
         /// <summary>
