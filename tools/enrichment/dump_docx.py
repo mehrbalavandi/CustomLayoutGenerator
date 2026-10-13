@@ -23,6 +23,12 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+R = '{http://schemas.openxmlformats.org/officeDocument/2006/relationships}'
+
+# بعد از main() روی متنِ کتاب: نامِ هر فایلِ صوتی ← Unitی که اولین لینکِ صوتی‌اش
+# (هایپرلینکِ «audio:…» در Word) در آن است. enrich.py با این، اسکریپت‌های صوتیِ هر Unit
+# را پیدا می‌کند (prepare --audio --unit).
+AUDIO_UNITS = {}
 
 
 # همان الگوی combinedPatternِ MainForm.cs برای مارکرهای اسکریپتِ صوتی
@@ -92,6 +98,16 @@ def main():
     page = int(args[2]) if len(args) > 2 else 1
     z = zipfile.ZipFile(src)
     styles = load_styles(z)
+    AUDIO_UNITS.clear()
+    audio_targets = {}
+    try:
+        rels = ET.fromstring(z.read('word/_rels/document.xml.rels'))
+        for rel in rels:
+            target = rel.get('Target') or ''
+            if target.lower().startswith('audio:'):
+                audio_targets[rel.get('Id')] = target[len('audio:'):].strip()
+    except KeyError:
+        pass
     body = ET.fromstring(z.read('word/document.xml')).find(W + 'body')
     items = []
     nav = {0: None, 1: None}
@@ -148,6 +164,11 @@ def main():
                     nav[lvl] = text.strip()
                     if lvl == 0:
                         nav[1] = None
+                if not audio:
+                    for h in child.iter(W + 'hyperlink'):
+                        f = audio_targets.get(h.get(R + 'id'))
+                        if f and f not in AUDIO_UNITS:
+                            AUDIO_UNITS[f] = nav[0]
                 if re.search(r'[A-Za-z]', text):
                     items.append({
                         'page': 0 if audio else state['page'],

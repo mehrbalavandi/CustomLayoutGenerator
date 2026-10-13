@@ -112,9 +112,18 @@ def guide_rules():
 
 # ───────────────────────── status ─────────────────────────
 
+def audio_units(book_dir):
+    """نامِ فایلِ صوتی ← Unitِ کتاب (از لینک‌های صوتیِ docxِ کتاب)."""
+    book_items(book_dir, False)
+    return dict(dump_docx.AUDIO_UNITS)
+
+
 def cmd_status(a):
     done = all_translated_keys(a.book)
+    units = {}
     for audio in (False, True):
+        if audio:
+            units = audio_units(a.book)
         try:
             items = book_items(a.book, audio)
         except SystemExit:
@@ -132,7 +141,8 @@ def cmd_status(a):
             tot += len(k)
             fin += len(d)
             mark = '✓' if len(d) == len(k) else ' '
-            print(f'{mark} {g[:48]:48s} {len(d):5d} / {len(k):5d}')
+            unit = f'  ({(units.get(g) or "?")[:20]})' if audio else ''
+            print(f'{mark} {g[:48]:48s} {len(d):5d} / {len(k):5d}{unit}')
         print(f'  مجموع (متن‌های یکتا): {fin} / {tot}')
 
 
@@ -206,7 +216,12 @@ def cmd_prepare(a):
             groups.append((g, []))
         groups[-1][1].append(x)
     if a.unit:
-        groups = [g for g in groups if a.unit.lower() in (g[0] or '').lower()]
+        if a.audio:
+            # اسکریپت‌های صوتیِ یک Unit: فایل‌هایی که لینکشان در آن Unitِ کتاب است.
+            units = audio_units(a.book)
+            groups = [g for g in groups if a.unit.lower() in (units.get(g[0]) or '').lower()]
+        else:
+            groups = [g for g in groups if a.unit.lower() in (g[0] or '').lower()]
     if a.audio:
         # اسکریپت‌ها کوتاه‌اند: چند فایلِ صوتیِ پشتِ‌هم در یک دسته (تا سقفِ max-items)،
         # هرکدام با بافتِ کاملِ خودش.
