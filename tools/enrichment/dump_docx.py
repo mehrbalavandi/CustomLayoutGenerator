@@ -10,6 +10,11 @@
 
 استفاده:
     python3 dump_docx.py "Mindset1- Custom- Units 01-08.docx" out.json [startPage]
+    python3 dump_docx.py --audio "Mindset1- Audio Scripts_markers.docx" out.json
+
+با --audio (اسکریپت‌های صوتی): مارکرهای زمانی ([2660]، [00:12]، [AudioStart: …]،
+[AudioEnd…]) از متن حذف می‌شوند — دقیقاً مثلِ اکسترکتور — و نامِ فایلِ صوتیِ هر پاراگراف
+(از آخرین [AudioStart: …]) در فیلدِ section می‌آید.
 """
 import json
 import re
@@ -18,6 +23,13 @@ import zipfile
 import xml.etree.ElementTree as ET
 
 W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+
+# همان الگوی combinedPatternِ MainForm.cs برای مارکرهای اسکریپتِ صوتی
+AUDIO_MARKER = re.compile(
+    r'\[AudioStart:\s*.+?\]|\[(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[\d+\]'
+    r'|\[AudioEnd:\s*(?:(?:\d{1,2}):)?\d{1,2}:\d{2}(?:\.\d+)?\]|\[AudioEnd\]', re.I)
+AUDIO_START = re.compile(r'\[AudioStart:\s*(.+?)\]', re.I)
 
 
 def normalize(text: str) -> str:
@@ -73,14 +85,17 @@ def outline_of(styles, p):
 
 
 def main():
-    src, out = sys.argv[1], sys.argv[2]
-    page = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+    args = sys.argv[1:]
+    audio = '--audio' in args
+    args = [a for a in args if a != '--audio']
+    src, out = args[0], args[1]
+    page = int(args[2]) if len(args) > 2 else 1
     z = zipfile.ZipFile(src)
     styles = load_styles(z)
     body = ET.fromstring(z.read('word/document.xml')).find(W + 'body')
     items = []
     nav = {0: None, 1: None}
-    state = {'page': page}
+    state = {'page': page, 'track': None}
 
     def para_text(p):
         ppr = p.find(W + 'pPr')
@@ -121,6 +136,11 @@ def main():
         for child in el:
             if child.tag == W + 'p':
                 text, pb = para_text(child)
+                if audio:
+                    m = AUDIO_START.search(text)
+                    if m:
+                        state['track'] = m.group(1).strip()
+                    text = AUDIO_MARKER.sub('', text)
                 if pb:
                     state['page'] += 1
                 lvl = outline_of(styles, child)
@@ -130,8 +150,9 @@ def main():
                         nav[1] = None
                 if re.search(r'[A-Za-z]', text):
                     items.append({
-                        'page': state['page'],
-                        'unit': nav[0], 'section': nav[1],
+                        'page': 0 if audio else state['page'],
+                        'unit': 'AUDIO SCRIPT' if audio else nav[0],
+                        'section': state['track'] if audio else nav[1],
                         'inTable': in_table,
                         'text': text,
                         'key': normalize(text),
@@ -145,7 +166,20 @@ def main():
                 if c is not None:
                     walk(c, in_table)
 
-    walk(body, False)
+    if audio:
+        # همان قراردادِ ProcessAudioScriptWordFile: هر فایلِ صوتی یک جدولِ دوردیفه است —
+        # ردیفِ اول نامِ فایل (AudioTrackName، ترجمه نمی‌شود)، ردیفِ دوم متنِ اسکریپت.
+        for tbl in body.iter(W + 'tbl'):
+            rows = tbl.findall(W + 'tr')
+            if len(rows) < 2:
+                continue
+            name = ''.join(para_text(p)[0] for p in rows[0].iter(W + 'p')).strip()
+            state['track'] = AUDIO_MARKER.sub('', name).strip() or None
+            for tr in rows[1:]:
+                for tc in tr.findall(W + 'tc'):
+                    walk(tc, False)
+    else:
+        walk(body, False)
     with open(out, 'w', encoding='utf-8') as f:
         json.dump(items, f, ensure_ascii=False, indent=1)
     print(len(items), 'paragraphs; last page', state['page'])

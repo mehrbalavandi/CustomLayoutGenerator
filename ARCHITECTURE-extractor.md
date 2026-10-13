@@ -41,7 +41,8 @@
 | `FontResolver.cs` | 449 | تشخیصِ فونتِ مؤثرِ هر ران. |
 | `Bookoutputwriter.cs` | 214 | نوشتنِ فایل‌ها روی دیسک + نسخه‌بندی. |
 | `ContentEnrichment.cs` | 315 | وصلِ ترجمه‌ها و کلماتِ تعاملی از حافظه‌ی ترجمه و دیکشنریِ مشترک (G-1…G-6). |
-| `tools/enrichment/` | — | راهنمای ترجمه (ENRICHMENT-GUIDE.md) و `dump_docx.py` برای آماده‌کردنِ متنِ ترجمه. |
+| `tools/enrichment/` | — | راهنمای ترجمه (ENRICHMENT-GUIDE.md)، `enrich.py` (status / prepare / merge با هر هوش مصنوعی) و `dump_docx.py` (متنِ پاراگراف‌ها از docx). |
+| `WORKFLOW.md` | — | راهنمای کارِ کلِ خط‌لوله، از Word تا اپ (در مخزنِ Flutter هم یک نسخه‌ی یکسان هست). |
 | `Class1.cs` | 4 | خالی. بازمانده‌ی قالبِ پروژه؛ می‌شود حذفش کرد. |
 
 ---
