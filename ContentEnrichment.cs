@@ -115,8 +115,19 @@ namespace CustomLayoutGenerator
                 });
             }
 
+            string curUnit = null, curSection = null;
+
             void Visit(ParagraphData p, int page, string unit, string section, string where)
             {
+                // 🐞 Unit/بخشِ گزارشِ pending: در کتاب‌هایی که همه‌چیز داخلِ جدول است (Mindset)،
+                // تیترهای Nav 1/Nav 2 هم داخلِ سلول‌اند؛ پس ردیابی برای هر پاراگرافِ متنِ کتاب،
+                // در هر عمقی، انجام می‌شود (نه فقط پاراگراف‌های سطحِ بالای صفحه).
+                if (where != "audio")
+                {
+                    TrackOutline(p, ref curUnit, ref curSection);
+                    unit = curUnit;
+                    section = curSection;
+                }
                 string text = ParagraphText(p);
                 SpanData merged = MergedBlankSpan(p);
                 if (merged != null && merged.HiddenParagraphs != null && merged.HiddenParagraphs.Count > 0)
@@ -195,12 +206,10 @@ namespace CustomLayoutGenerator
                 }
             }
 
-            string curUnit = null, curSection = null;
             foreach (var page in pages)
             {
                 foreach (var p in page.Paragraphs)
                 {
-                    TrackOutline(p, ref curUnit, ref curSection);
                     Visit(p, page.PageNumber, curUnit, curSection, "page");
                 }
             }

@@ -40,6 +40,10 @@ NON_WESTERN_DIGITS = str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '
 BLANK_NUMBER = re.compile(r'(?:(?<=\s)|^)\(?(\d{1,2})\)?\s*(?=\{blk\})')
 
 
+# جای خالیِ بی‌استایل: فقط خط‌تیره/زیرخط/[ ... ]/•••، بدونِ {blk} (ENRICHMENT-GUIDE، قاعده‌ی ۲-۵).
+PLAIN_BLANK = re.compile(r'-{2,}|_{2,}|\[\s*(?:\.{3}|…)\s*\]|\.{4,}|•{3,}')
+
+
 def blank_numbers(text):
     return BLANK_NUMBER.findall(text)
 
@@ -177,6 +181,8 @@ PROMPT_HEAD = """# وظیفه: ترجمه‌ی فارسی و عربی + انتخ
 ```
 
 - برای **همه‌ی** شناسه‌های بخشِ «برای ترجمه» یک آیتم در translations بدهید.
+- `plainBlank: true` (اگر در آیتمی آمده): جای خالی بدونِ {{blk}}، فقط با خط‌تیره یا زیرخط. طبقِ
+  قاعده‌ی «جای خالیِ بی‌استایل»، اگر پاسخش در بافت هست با پاسخ ترجمه کنید، وگرنه `---` بماند.
 - `blankNumbers` (اگر در آیتمی آمده): عددهایی که درست پیش از یک جای خالی‌اند و به احتمالِ
   زیاد فقط شماره‌ی آن جای خالی در تمرین‌اند. طبقِ قاعده‌ی «شماره‌ی جای خالی» در ترجمه
   نمی‌آیند — مگر بافت نشان دهد واقعاً جزءِ جمله‌اند.
@@ -296,6 +302,8 @@ def cmd_prepare(a):
                 nums = blank_numbers(v['src'])
                 if nums:
                     item['blankNumbers'] = nums
+                if PLAIN_BLANK.search(v['src']):
+                    item['plainBlank'] = True
                 payload.append(item)
             prompt = PROMPT_HEAD.format(rules=guide_rules(), lexicon=lex_lines,
                                         context=(f'### {name}\n\n' if not a.audio else '') + context,

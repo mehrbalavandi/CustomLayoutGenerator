@@ -2947,16 +2947,11 @@ namespace CustomLayoutGenerator
             {
                 if (!string.IsNullOrEmpty(runStyleId)) fontSizeStr = GetFontSizeFromStyleId(mainPart, runStyleId);
                 if (string.IsNullOrEmpty(fontSizeStr) && pPr?.ParagraphStyleId?.Val?.Value != null) fontSizeStr = GetFontSizeFromStyleId(mainPart, pPr.ParagraphStyleId.Val.Value);
-                if (string.IsNullOrEmpty(fontSizeStr) && pPr?.ParagraphMarkRunProperties != null)
-                {
-                    var pSize = pPr.ParagraphMarkRunProperties.GetFirstChild<FontSize>();
-                    if (pSize?.Val?.Value != null) fontSizeStr = pSize.Val.Value;
-                    if (string.IsNullOrEmpty(fontSizeStr))
-                    {
-                        var pSizeCs = pPr.ParagraphMarkRunProperties.GetFirstChild<FontSizeComplexScript>();
-                        if (pSizeCs?.Val?.Value != null) fontSizeStr = pSizeCs.Val.Value;
-                    }
-                }
+                // 🐞 E-11: اندازه‌ی «نشانه‌ی پایانِ پاراگراف» (<w:pPr>/<w:rPr>) دیگر به متن ارث
+                // نمی‌رسد. در Word آن rPr فقط قالبِ خودِ علامتِ ¶ (و شماره‌ی خودکار، E-10) است، نه
+                // رانِ متن. قبلاً اگر ران و استایلِ پاراگراف اندازه نداشتند، این اندازه برداشته
+                // می‌شد: Mindset 1 ص۱۹ تمرینِ ۴ — گزینه‌ی سوم بی‌pStyle بود و نشانه‌ی پایانش
+                // sz=32 داشت، پس در اپ ۱۶pt دیده می‌شد، در Word ۱۱.۵pt (Normal).
             }
 
             // 🐞 Mindset 2 ص۵۷ (کلماتِ جدول وسطِ کلمه می‌شکستند): پاراگرافی که
