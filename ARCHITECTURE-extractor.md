@@ -40,7 +40,7 @@
 | `Numberingresolver.cs` | 208 | شماره‌گذاریِ خودکارِ لیست‌ها (`numbering.xml`). |
 | `FontResolver.cs` | 449 | تشخیصِ فونتِ مؤثرِ هر ران. |
 | `Bookoutputwriter.cs` | 214 | نوشتنِ فایل‌ها روی دیسک + نسخه‌بندی. |
-| `ContentEnrichment.cs` | 315 | وصلِ ترجمه‌ها و کلماتِ تعاملی از حافظه‌ی ترجمه و دیکشنریِ مشترک (G-1…G-6). |
+| `ContentEnrichment.cs` | 427 | وصلِ ترجمه‌ها و کلماتِ تعاملی از حافظه‌ی ترجمه و دیکشنریِ مشترک (G-1…G-7). |
 | `tools/enrichment/` | — | راهنمای ترجمه (ENRICHMENT-GUIDE.md)، `enrich.py` (status / prepare / merge با هر هوش مصنوعی) و `dump_docx.py` (متنِ پاراگراف‌ها از docx). |
 | `WORKFLOW.md` | — | راهنمای کارِ کلِ خط‌لوله، از Word تا اپ (در مخزنِ Flutter هم یک نسخه‌ی یکسان هست). |
 | `Class1.cs` | 4 | خالی. بازمانده‌ی قالبِ پروژه؛ می‌شود حذفش کرد. |
@@ -222,7 +222,7 @@ assets/data/{کتاب}/enrichment/pending.json         ← خروجی: پارا�
 ```
 
 جای IeltsJsonOptimizer را در خط‌لوله می‌گیرد (آن ابزار دست‌نخورده می‌ماند). قانون‌ها: G-1 تا
-G-6 در RULES-extraction.md؛ قواعدِ ترجمه/انتخابِ کلمات: `tools/enrichment/ENRICHMENT-GUIDE.md`.
+G-7 در RULES-extraction.md؛ قواعدِ ترجمه/انتخابِ کلمات: `tools/enrichment/ENRICHMENT-GUIDE.md`.
 `tools/enrichment/dump_docx.py` متنِ پاراگراف‌ها را مستقیم از docx (با صفحه/Unit/پاسخ‌های
 پنهان) برای ترجمه‌ی واحد به واحد بیرون می‌دهد؛ `normalize()`ِ آن باید با `Normalize`ِ C# یکی بماند.
 

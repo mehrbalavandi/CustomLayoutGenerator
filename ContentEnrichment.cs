@@ -10,7 +10,7 @@ using Newtonsoft.Json.Linq;
 namespace CustomLayoutGenerator
 {
     /// <summary>
-    /// 🌟 غنی‌سازی (ترجمه‌ی فارسی/عربی + کلمات و اصطلاحاتِ تعاملی) — قانون‌های G-1 تا G-6
+    /// 🌟 غنی‌سازی (ترجمه‌ی فارسی/عربی + کلمات و اصطلاحاتِ تعاملی) — قانون‌های G-1 تا G-7
     /// در RULES-extraction.md.
     ///
     /// ترجمه‌ها دیگر داخلِ JSONِ صفحه‌ها «ساخته» نمی‌شوند؛ جدا از کتاب نگه داشته می‌شوند و در
@@ -100,10 +100,37 @@ namespace CustomLayoutGenerator
             var pendingKeys = new HashSet<string>(StringComparer.Ordinal);
             var bookText = new StringBuilder();
 
+            void AddPending(int page, string unit, string section, string where, string key, string text)
+            {
+                // هر متن فقط یک‌بار در pending (متنِ تکراری یک ترجمه دارد)
+                if (!pendingKeys.Add(key)) return;
+                pending.Add(new JObject
+                {
+                    ["page"] = page,
+                    ["unit"] = unit,
+                    ["section"] = section,
+                    ["where"] = where,
+                    ["key"] = key,
+                    ["text"] = text,
+                });
+            }
+
             void Visit(ParagraphData p, int page, string unit, string section, string where)
             {
                 string text = ParagraphText(p);
-                if (HasLetters(text))
+                SpanData merged = MergedBlankSpan(p);
+                if (merged != null && merged.HiddenParagraphs != null && merged.HiddenParagraphs.Count > 0)
+                {
+                    // G-7: جوابِ ادغام‌شده‌ی BlkPa با جدول/عکس. هر پاراگرافِ اصلیِ جواب (و
+                    // سلول‌های جدولش) مثلِ سند جدا ترجمه می‌شود؛ ترجمه‌ی کلِ جواب = ترجمه‌های
+                    // متنی‌ها پشتِ هم.
+                    foreach (var hp in merged.HiddenParagraphs)
+                        Visit(hp, page, unit, section, where);
+                    var withText = merged.HiddenParagraphs.Where(h => HasLetters(ParagraphText(h))).ToList();
+                    p.TranslationFa = JoinAll(withText.Select(h => h.TranslationFa));
+                    p.TranslationAr = JoinAll(withText.Select(h => h.TranslationAr));
+                }
+                else if (HasLetters(text))
                 {
                     result.TotalParagraphs++;
                     bookText.Append(text.Replace("{blk}", "").Replace("{/blk}", "")).Append('\n');
@@ -115,24 +142,46 @@ namespace CustomLayoutGenerator
                         foreach (var t in e.Terms) usedTerms.Add(t);
                         result.Translated++;
                     }
+                    else if (merged != null)
+                    {
+                        // G-7: چند پاراگرافِ BlkPa که اکسترکتور در یک جای‌خالی ادغام کرده؛ در
+                        // سند (و در dump_docx) هر کدام پاراگرافِ جدایی است، پس هر خط جدا.
+                        var fa = new List<string>();
+                        var ar = new List<string>();
+                        bool all = true;
+                        foreach (string line in MergedBlankLines(merged))
+                        {
+                            if (!HasLetters(line)) continue;
+                            var le = LookupLine(tm, line, out string lineKey, out string lineText);
+                            if (le == null)
+                            {
+                                all = false;
+                                AddPending(page, unit, section, where, lineKey, lineText);
+                                continue;
+                            }
+                            fa.Add(le.Fa ?? "");
+                            ar.Add(le.Ar ?? "");
+                            foreach (var t in le.Terms) usedTerms.Add(t);
+                        }
+                        if (all)
+                        {
+                            p.TranslationFa = JoinAll(fa);
+                            p.TranslationAr = JoinAll(ar);
+                            result.Translated++;
+                        }
+                        else
+                        {
+                            p.TranslationFa = null;
+                            p.TranslationAr = null;
+                            result.Pending++;
+                        }
+                    }
                     else
                     {
                         p.TranslationFa = null;
                         p.TranslationAr = null;
                         result.Pending++;
-                        // هر متن فقط یک‌بار در pending (متنِ تکراری یک ترجمه دارد)
-                        if (pendingKeys.Add(key))
-                        {
-                            pending.Add(new JObject
-                            {
-                                ["page"] = page,
-                                ["unit"] = unit,
-                                ["section"] = section,
-                                ["where"] = where,
-                                ["key"] = key,
-                                ["text"] = text,
-                            });
-                        }
+                        AddPending(page, unit, section, where, key, text);
                     }
                 }
                 // سلول‌های جدول: هر پاراگرافِ سلول جداگانه
@@ -186,6 +235,69 @@ namespace CustomLayoutGenerator
                 File.Delete(result.PendingPath);
             }
             return result;
+        }
+
+        // ───────────────────────── جواب‌های ادغام‌شده (G-7) ─────────────────────────
+
+        /// <summary>
+        /// اسپنِ جای‌خالی‌ای که اکسترکتور از ادغامِ پاراگراف‌های BlkPa ساخته (MainForm،
+        /// MergeBlankParagraphs): پاراگراف فقط همین یک اسپنِ متنی را دارد، متنش سراسر
+        /// {blk}…{/blk} است، و یا چند خط (InnerSpanِ «\n») دارد یا محتوای غنی.
+        /// </summary>
+        private static SpanData MergedBlankSpan(ParagraphData p)
+        {
+            var texts = p.Spans.Where(s => s.Type == "text" && !string.IsNullOrEmpty(s.Content)).ToList();
+            if (texts.Count != 1) return null;
+            var s0 = texts[0];
+            if (!s0.Content.StartsWith("{blk}") || !s0.Content.EndsWith("{/blk}")) return null;
+            bool multiLine = s0.InnerSpans != null && s0.InnerSpans.Any(x => x.Content == "\n");
+            bool rich = s0.HiddenParagraphs != null && s0.HiddenParagraphs.Count > 0;
+            return multiLine || rich ? s0 : null;
+        }
+
+        /// <summary>خط‌های جوابِ ادغام‌شده (هر خط = یک پاراگرافِ اصلیِ سند).</summary>
+        private static List<string> MergedBlankLines(SpanData blank)
+        {
+            var lines = new List<string>();
+            var sb = new StringBuilder();
+            foreach (var s in blank.InnerSpans ?? new List<SpanData>())
+            {
+                if (s.Content == "\n") { lines.Add(sb.ToString()); sb.Clear(); }
+                else sb.Append(s.Content);
+            }
+            lines.Add(sb.ToString());
+            return lines;
+        }
+
+        /// <summary>
+        /// شماره‌ی لیستی که اکسترکتور اولِ خط‌های دوم به بعد گذاشته («2:  »، «b)  »، «•  »).
+        /// در سند شماره جزءِ متن نیست، پس کلیدِ dump_docx آن را ندارد.
+        /// </summary>
+        private static readonly Regex InjectedListMarker = new Regex(
+            @"^\s*(?:\(?(?:[0-9]{1,3}|[a-zA-Z]|[ivxIVX]{1,5})[.:)]|[•●▪■◦○\-–])\s+",
+            RegexOptions.Compiled);
+
+        private static TmEntry LookupLine(Dictionary<string, TmEntry> tm, string line, out string key, out string text)
+        {
+            text = line;
+            key = Normalize(line);
+            if (tm.TryGetValue(key, out var e)) return e;
+            string stripped = InjectedListMarker.Replace(line, "", 1);
+            if (stripped != line)
+            {
+                text = stripped;
+                key = Normalize(stripped);
+                if (tm.TryGetValue(key, out e)) return e;
+            }
+            return null;
+        }
+
+        /// <summary>همه با \n پشتِ هم؛ اگر یکی خالی است null (ترجمه‌ی نصفه نشان داده نمی‌شود).</summary>
+        private static string JoinAll(IEnumerable<string> parts)
+        {
+            var list = parts.ToList();
+            if (list.Count == 0 || list.Any(string.IsNullOrWhiteSpace)) return null;
+            return string.Join("\n", list.Select(x => x.Trim()));
         }
 
         private static void TrackOutline(ParagraphData p, ref string unit, ref string section)
