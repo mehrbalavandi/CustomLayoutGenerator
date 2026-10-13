@@ -40,6 +40,8 @@
 | `Numberingresolver.cs` | 208 | شماره‌گذاریِ خودکارِ لیست‌ها (`numbering.xml`). |
 | `FontResolver.cs` | 449 | تشخیصِ فونتِ مؤثرِ هر ران. |
 | `Bookoutputwriter.cs` | 214 | نوشتنِ فایل‌ها روی دیسک + نسخه‌بندی. |
+| `ContentEnrichment.cs` | 315 | وصلِ ترجمه‌ها و کلماتِ تعاملی از حافظه‌ی ترجمه و دیکشنریِ مشترک (G-1…G-6). |
+| `tools/enrichment/` | — | راهنمای ترجمه (ENRICHMENT-GUIDE.md) و `dump_docx.py` برای آماده‌کردنِ متنِ ترجمه. |
 | `Class1.cs` | 4 | خالی. بازمانده‌ی قالبِ پروژه؛ می‌شود حذفش کرد. |
 
 ---
@@ -196,7 +198,7 @@ numbering است، نه در رانِ متن** — `LevelBold` و `LevelColor` �
 خروجی را می‌نویسد:
 
 ```
-index.json          ← فهرستِ صفحات + AudioScripts + Interactives + Outline (قانونِ O-4)
+index.json          ← فهرستِ صفحات + AudioScripts + Interactives (G-4) + Outline (قانونِ O-4)
 pages/page_0001.json
 audio_scripts/…
 images/  audio/
@@ -206,6 +208,22 @@ images/  audio/
 **همین است که دانلودِ دلتایی را ممکن می‌کند**؛ صفحه‌ای که عوض نشده دوباره
 دانلود نمی‌شود. نامِ فایلِ صفحه از `PageNumber` می‌آید، پس شماره‌ی شروعِ
 دلخواه خودبه‌خود در نامِ فایل‌ها هم منعکس می‌شود.
+
+## ContentEnrichment.cs
+
+ترجمه‌ها و کلمات تعاملی را **بعد از** پردازشِ کتاب و **قبل از** `BookOutputWriter.Write`
+وصل می‌کند (تا هَشِ صفحه‌ها محتوای نهایی را بازتاب دهد). منابع جدا از کتاب‌اند:
+
+```
+assets/data/{کتاب}/enrichment/translations.json   ← حافظه‌ی ترجمه (کلید = متنِ نرمال‌شده)
+assets/data/_lexicon/lexicon.json                  ← دیکشنریِ مشترکِ همه‌ی کتاب‌ها
+assets/data/{کتاب}/enrichment/pending.json         ← خروجی: پاراگراف‌های بی‌ترجمه
+```
+
+جای IeltsJsonOptimizer را در خط‌لوله می‌گیرد (آن ابزار دست‌نخورده می‌ماند). قانون‌ها: G-1 تا
+G-6 در RULES-extraction.md؛ قواعدِ ترجمه/انتخابِ کلمات: `tools/enrichment/ENRICHMENT-GUIDE.md`.
+`tools/enrichment/dump_docx.py` متنِ پاراگراف‌ها را مستقیم از docx (با صفحه/Unit/پاسخ‌های
+پنهان) برای ترجمه‌ی واحد به واحد بیرون می‌دهد؛ `normalize()`ِ آن باید با `Normalize`ِ C# یکی بماند.
 
 ## تله‌های شناخته‌شده (برای خودِ آینده)
 

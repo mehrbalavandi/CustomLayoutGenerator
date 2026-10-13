@@ -220,12 +220,18 @@ namespace CustomLayoutGenerator
                         // 🌟 ۱. ریسپانسیو: نام استایل‌های جدول → primitiveهای declarative
                         ResponsiveLowering.Apply(pages);
 
-                        // 🌟 ۲. خروجی per-page + index.json (نسخهٔ هر صفحه = هَشِ محتوا)
-                        BookOutputWriter.Write(outputDir, pages, audioScripts);
+                        // 🌟 ۲. غنی‌سازی (G-1…G-6): ترجمه‌ها از حافظه‌ی ترجمه‌ی جدا از کتاب و
+                        // Interactives از دیکشنریِ مشترک — باید قبل از نوشتنِ خروجی باشد تا هَشِ
+                        // صفحه‌ها محتوای نهایی را بازتاب دهد.
+                        var enrichment = ContentEnrichment.Apply(outputDir, pages, audioScripts);
+
+                        // 🌟 ۳. خروجی per-page + index.json (نسخهٔ هر صفحه = هَشِ محتوا)
+                        BookOutputWriter.Write(outputDir, pages, audioScripts, enrichment.Interactives);
 
                         MessageBox.Show(
                             $"کتاب با موفقیت به {pages.Count} فایلِ صفحه + index.json تبدیل شد!\n" +
-                            $"شماره‌ی صفحات: {startPage.Value} تا {startPage.Value + pages.Count - 1}",
+                            $"شماره‌ی صفحات: {startPage.Value} تا {startPage.Value + pages.Count - 1}\n\n" +
+                            enrichment.Summary,
                             "عملیات موفق", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     finally

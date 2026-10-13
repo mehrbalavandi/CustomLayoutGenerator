@@ -57,6 +57,14 @@ namespace CustomLayoutGenerator
         public int? EndMs { get; set; }
         public string AudioTrackName { get; set; }
 
+        // 🌟 G-1: ترجمه‌ی پاراگراف، از حافظه‌ی ترجمه‌ی جدا از کتاب
+        // (enrichment/translations.json) با کلیدِ متنِ نرمال‌شده — ContentEnrichment.
+        // null (و در JSON حذف) اگر هنوز ترجمه ندارد. نامِ کلید همان است که اپ می‌خواند.
+        [JsonProperty("translationFa")]
+        public string TranslationFa { get; set; }
+        [JsonProperty("translationAr")]
+        public string TranslationAr { get; set; }
+
         public List<SpanData> Spans { get; set; } = new List<SpanData>();
     }
 
