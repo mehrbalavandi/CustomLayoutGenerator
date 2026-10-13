@@ -12,6 +12,7 @@
 داده‌های تازه در مخزنِ ielts_assistant:
 - `assets/data/Mindset 01/enrichment/translations.json`: ترجمه‌ی آزمایشیِ Unit 1 Reading
 - `assets/data/_lexicon/lexicon.json`: دیکشنریِ مشترک، فعلاً ۷۴ مدخل
+- `.gitignore`: پوشه‌ی `enrichment/` هر کتاب در گیت می‌ماند. اگر بعد از استخراج commit کنید، `pending.json` با `git pull` به دستِ من هم می‌رسد و لازم نیست جدا بفرستیدش.
 
 ## چه چیزی عوض شد
 **قبلاً:**
