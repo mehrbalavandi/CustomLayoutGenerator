@@ -34,6 +34,15 @@ LEX_REQUIRED = ['headword', 'forms', 'pos', 'ipa', 'pronounceFa', 'pronounceAr',
                 'translationAr', 'explanationFa', 'explanationAr', 'cefrLevel']
 NON_WESTERN_DIGITS = str.maketrans('۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', '01234567890123456789')
 
+# شماره‌ی جای خالی: عددِ یک یا دو رقمیِ تنها (شاید داخلِ پرانتز) درست پیش از {blk}، مثلِ
+# «They are a 2 {blk}close{/blk} happy family.» — شماره‌ی سؤال است، نه بخشی از جمله
+# (ENRICHMENT-GUIDE، قاعده‌ی ۲-۵).
+BLANK_NUMBER = re.compile(r'(?:(?<=\s)|^)\(?(\d{1,2})\)?\s*(?=\{blk\})')
+
+
+def blank_numbers(text):
+    return BLANK_NUMBER.findall(text)
+
 
 # ───────────────────────── فایل‌ها ─────────────────────────
 
@@ -158,6 +167,9 @@ PROMPT_HEAD = """# وظیفه: ترجمه‌ی فارسی و عربی + انتخ
 ```
 
 - برای **همه‌ی** شناسه‌های بخشِ «برای ترجمه» یک آیتم در translations بدهید.
+- `blankNumbers` (اگر در آیتمی آمده): عددهایی که درست پیش از یک جای خالی‌اند و به احتمالِ
+  زیاد فقط شماره‌ی آن جای خالی در تمرین‌اند. طبقِ قاعده‌ی «شماره‌ی جای خالی» در ترجمه
+  نمی‌آیند — مگر بافت نشان دهد واقعاً جزءِ جمله‌اند.
 - `terms`: شناسه‌ی مدخل‌هایی از دیکشنری که در **همین** پاراگراف تعاملی شوند. اگر مدخل در
   «دیکشنریِ موجود» (پایین) هست، همان شناسه را بنویسید و آن را در newLexicon تکرار نکنید.
   اگر نیست، شناسه‌ی تازه (معمولاً خودِ headword با حروفِ کوچک) بسازید و مدخلِ کاملش را در
@@ -263,7 +275,13 @@ def cmd_prepare(a):
             batch = f'batch_{n:03d}'
             ids = {f'p{i + 1}': {'key': x['key'], 'src': x['text'], 'page': x['page'],
                                  'unit': x['unit'], 'section': x['section']} for i, x in enumerate(part)}
-            payload = [{'id': i, 'text': v['src']} for i, v in ids.items()]
+            payload = []
+            for i, v in ids.items():
+                item = {'id': i, 'text': v['src']}
+                nums = blank_numbers(v['src'])
+                if nums:
+                    item['blankNumbers'] = nums
+                payload.append(item)
             prompt = PROMPT_HEAD.format(rules=guide_rules(), lexicon=lex_lines,
                                         context=(f'### {name}\n\n' if not a.audio else '') + context,
                                         items=json.dumps(payload, ensure_ascii=False, indent=1))
@@ -286,6 +304,11 @@ def extract_json(text):
         text = m.group(1)
     start, end = text.find('{'), text.rfind('}')
     return json.loads(text[start:end + 1])
+
+
+def clean_nums(src):
+    """متن بدونِ شماره‌های جای خالی — تا اگر همان عدد جای دیگری از جمله هم هست، هشدار ندهیم."""
+    return BLANK_NUMBER.sub('', src)
 
 
 def form_in(text, form):
@@ -336,6 +359,10 @@ def cmd_merge(a):
             errors.append(f'{pid}: ترجمه‌ی فارسی یا عربی خالی است.')
         if src.count('\n') != fa.count('\n') or src.count('\n') != ar.count('\n'):
             errors.append(f'{pid}: تعدادِ خط‌ها (\\n) با متنِ اصلی یکی نیست.')
+        # شماره‌ی جای خالی نباید در ترجمه بیاید؛ فقط هشدار، چون گاهی عدد واقعاً جزءِ جمله است.
+        for num in blank_numbers(src):
+            if num not in re.findall(r'\d+', clean_nums(src)) and re.search(rf'(?<!\d){num}(?!\d)', fa):
+                warnings.append(f'{pid}: عددِ {num} پیش از جای خالی شاید شماره‌ی سؤال باشد ولی در ترجمه آمده؛ بررسی کنید.')
         clean = src.replace('{blk}', '').replace('{/blk}', '')
         terms = []
         for tid in t.get('terms') or []:
