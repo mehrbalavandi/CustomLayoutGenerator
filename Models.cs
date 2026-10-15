@@ -20,6 +20,12 @@ namespace CustomLayoutGenerator
 
         public double SpaceAfter { get; set; }
         public double SpaceBefore { get; set; }
+        /// <summary>
+        /// 🌟 B-8: پاراگرافِ پوششیِ یک جدولِ سطحِ صفحه، که SpaceBeforeش ارتفاعِ پاراگراف‌های
+        /// خالیِ قبل از جدول در Word است. اپ با دیدنِ آن حاشیه‌ی پیش‌فرضِ جدول را اضافه نمی‌کند
+        /// (قانونِ T-25 در RULES-rendering.md). null (و در JSON حذف) برای بقیه.
+        /// </summary>
+        public bool? TableSpacingFromDoc { get; set; }
         public double? LineSpacing { get; set; }       // ضریبِ فاصله‌ی خطوط (240=تک → 1.0)
         public double? IndentLeft { get; set; }
         public double? IndentRight { get; set; }

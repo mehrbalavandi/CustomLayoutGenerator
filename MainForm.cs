@@ -258,10 +258,16 @@ namespace CustomLayoutGenerator
             {
                 var body = wordDoc.MainDocumentPart.Document.Body;
 
+                // 🌟 B-8: ارتفاعِ پاراگراف‌های خالیِ پشتِ‌سرِهم (فاصله‌اندازهای Word) تا عنصرِ بعدی.
+                double pendingGapPt = 0;
+                bool lastWasTable = false;
+
                 foreach (var element in body.Elements())
                 {
                     if (element.Descendants<Break>().Any(b => b.Type != null && b.Type.Value == BreakValues.Page))
                     {
+                        pendingGapPt = 0;
+                        lastWasTable = false;
                         // pages.Count تعدادِ صفحاتِ *قبلاً افزوده‌شده* است، پس این
                         // فرمول همان دنباله‌ی قبلی را می‌دهد وقتی شروع ۱ باشد
                         // (۱+۱=۲، ...) و با هر شروعِ دیگری هم درست ادامه می‌دهد.
@@ -276,6 +282,7 @@ namespace CustomLayoutGenerator
                         bool isBlkLp = IsTargetStyle(paragraph.ParagraphProperties?.ParagraphStyleId?.Val?.Value, wordDoc.MainDocumentPart, "BlkLp");
 
                         var paraDataList = ParseParagraph(paragraph, wordDoc.MainDocumentPart, resolver, outputDir, false);
+                        var parsedFirst = paraDataList.FirstOrDefault();
 
                         // 🌟 فیلتر پاراگراف‌های زباله: حذف پاراگراف‌هایی که فقط کاراکترهای \n یا فضای خالی دارند
                         // 🐞 پاراگرافِ «فقط‌شماره»ی لیست حذف نمی‌شود (Word شماره‌اش را نشان می‌دهد)
@@ -284,8 +291,22 @@ namespace CustomLayoutGenerator
                             p.StartMs == null &&
                             string.IsNullOrEmpty(p.ListMarker));
 
+                        // 🌟 B-8: پاراگرافِ خالی حذف می‌شود ولی ارتفاعش در Word (فاصله‌ی بینِ دو
+                        // جدول) نگه داشته می‌شود تا به عنصرِ بعدی برسد.
+                        if (paraDataList.Count == 0 && parsedFirst != null)
+                        {
+                            pendingGapPt += EmptyParagraphHeightPt(paragraph, parsedFirst, wordDoc.MainDocumentPart);
+                        }
+
                         if (paraDataList.Count > 0)
                         {
+                            // فقط فاصله‌ی «بعد از جدول»؛ فاصله‌اندازِ بینِ دو متن مثلِ قبل نادیده
+                            // گرفته می‌شود (رفتارِ متن‌ها عوض نشود).
+                            if (lastWasTable && pendingGapPt > 0)
+                                paraDataList[0].SpaceBefore = Math.Round(paraDataList[0].SpaceBefore + pendingGapPt, 1);
+                            pendingGapPt = 0;
+                            lastWasTable = false;
+
                             currentPage.Paragraphs.AddRange(paraDataList);
 
                             if (isBlkPa)
@@ -308,7 +329,15 @@ namespace CustomLayoutGenerator
                         SpanData tableSpan;
                         try { tableSpan = ParseTable(table, wordDoc.MainDocumentPart, resolver, outputDir); }
                         finally { if (hiddenTable) _suppressBlankDepth--; }
-                        var para = new ParagraphData();
+                        // 🌟 B-8: جدول در Word هیچ فاصله‌ی بالا/پایینی ندارد؛ فاصله‌اش با عنصرِ قبلی
+                        // همان پاراگراف‌های خالیِ بینِ آن‌هاست (اپ دیگر ۱۲px پیش‌فرض اضافه نمی‌کند).
+                        var para = new ParagraphData
+                        {
+                            SpaceBefore = Math.Round(pendingGapPt, 1),
+                            TableSpacingFromDoc = true,
+                        };
+                        pendingGapPt = 0;
+                        lastWasTable = true;
                         para.Spans.Add(tableSpan);
                         currentPage.Paragraphs.Add(para);
                         if (hiddenTable) _blankParagraphSet.Add(para);
@@ -2653,6 +2682,23 @@ namespace CustomLayoutGenerator
                 style = mainPart.StyleDefinitionsPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == basedOn);
             }
             return null;
+        }
+
+        /// <summary>
+        /// 🌟 B-8: ارتفاعِ یک پاراگرافِ خالی در Word (pt): فاصله‌ی قبل + یک خط به اندازه‌ی
+        /// فونتِ «نشانه‌ی پایانِ پاراگراف» + فاصله‌ی بعد. فاصله‌اندازهای این کتاب معمولاً
+        /// فونتِ ۱pt دارند، پس ارتفاعشان تقریباً همان فاصله‌ی بعد (۰ یا ۸pt) است.
+        /// </summary>
+        private double EmptyParagraphHeightPt(Paragraph p, ParagraphData parsed, MainDocumentPart mainPart)
+        {
+            string sz = p.ParagraphProperties?.ParagraphMarkRunProperties?.GetFirstChild<FontSize>()?.Val?.Value
+                ?? GetFontSizeFromStyleId(mainPart,
+                       p.ParagraphProperties?.ParagraphStyleId?.Val?.Value ?? DefaultParagraphStyleId(mainPart))
+                ?? mainPart?.StyleDefinitionsPart?.Styles?.DocDefaults?.RunPropertiesDefault
+                       ?.RunPropertiesBaseStyle?.GetFirstChild<FontSize>()?.Val?.Value;
+            double fontPt = double.TryParse(sz, out double halfPoints) ? halfPoints / 2.0 : 11.0;
+            double line = fontPt * 1.2 * (parsed.LineSpacing ?? 1.0);
+            return parsed.SpaceBefore + line + parsed.SpaceAfter;
         }
 
         private string GetFontSizeFromStyleId(MainDocumentPart mainPart, string styleId)
