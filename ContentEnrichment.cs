@@ -52,6 +52,9 @@ namespace CustomLayoutGenerator
             public string Fa;
             public string Ar;
             public List<string> Terms = new List<string>();
+            // G-8: ترجمه‌ی جوابِ هر {blk}، به ترتیب (null اگر داده نیست)
+            public List<string> BlanksFa;
+            public List<string> BlanksAr;
         }
 
         // ───────────────────────── کلید ─────────────────────────
@@ -150,6 +153,11 @@ namespace CustomLayoutGenerator
                     {
                         p.TranslationFa = string.IsNullOrWhiteSpace(e.Fa) ? null : e.Fa;
                         p.TranslationAr = string.IsNullOrWhiteSpace(e.Ar) ? null : e.Ar;
+                        // G-8: فقط اگر تعدادشان با جای‌خالی‌های همین پاراگراف جور است.
+                        int blankCount = Regex.Matches(text, @"\{blk\}").Count;
+                        bool blanksOk = e.BlanksFa != null && blankCount > 0 && e.BlanksFa.Count == blankCount;
+                        p.BlanksFa = blanksOk ? e.BlanksFa : null;
+                        p.BlanksAr = blanksOk ? e.BlanksAr : null;
                         foreach (var t in e.Terms) usedTerms.Add(t);
                         result.Translated++;
                     }
@@ -355,6 +363,11 @@ namespace CustomLayoutGenerator
                     };
                     if (v["terms"] is JArray terms)
                         e.Terms.AddRange(terms.Select(t => (string)t).Where(t => !string.IsNullOrWhiteSpace(t)));
+                    if (v["blanks"] is JArray blanks)
+                    {
+                        e.BlanksFa = blanks.Select(b => (string)b?["fa"] ?? "").ToList();
+                        e.BlanksAr = blanks.Select(b => (string)b?["ar"] ?? "").ToList();
+                    }
                     tm[key] = e;
                 }
             }

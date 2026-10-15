@@ -41,6 +41,8 @@ BLANK_NUMBER = re.compile(r'(?:(?<=\s)|^)\(?(\d{1,2})\)?\s*(?=\{blk\})')
 
 
 # جای خالیِ بی‌استایل: فقط خط‌تیره/زیرخط/[ ... ]/•••، بدونِ {blk} (ENRICHMENT-GUIDE، قاعده‌ی ۲-۵).
+# پاسخِ هر جای خالی (G-8)
+BLANK_ANSWER = re.compile(r'\{blk\}(.*?)\{/blk\}', re.S)
 PLAIN_BLANK = re.compile(r'-{2,}|_{2,}|(?:_ ){2,}_|\[\s*(?:\.{3}|…)\s*\]|\.{4,}|•{3,}')
 
 
@@ -166,7 +168,8 @@ PROMPT_HEAD = """# وظیفه: ترجمه‌ی فارسی و عربی + انتخ
 ```json
 {{
   "translations": [
-    {{ "id": "p1", "fa": "…", "ar": "…", "terms": ["شناسه‌ی مدخل", "…"] }}
+    {{ "id": "p1", "fa": "…", "ar": "…", "terms": ["شناسه‌ی مدخل", "…"] }},
+    {{ "id": "p2", "fa": "…", "ar": "…", "terms": [], "blanks": [{{ "fa": "…", "ar": "…" }}] }}
   ],
   "newLexicon": {{
     "شناسه‌ی مدخلِ تازه": {{
@@ -183,6 +186,12 @@ PROMPT_HEAD = """# وظیفه: ترجمه‌ی فارسی و عربی + انتخ
 - برای **همه‌ی** شناسه‌های بخشِ «برای ترجمه» یک آیتم در translations بدهید.
 - `plainBlank: true` (اگر در آیتمی آمده): جای خالی بدونِ {{blk}}، فقط با خط‌تیره یا زیرخط. طبقِ
   قاعده‌ی «جای خالیِ بی‌استایل»، اگر پاسخش در بافت هست با پاسخ ترجمه کنید، وگرنه `---` بماند.
+- `blankAnswers` (اگر در آیتمی آمده): پاسخِ جای‌خالی‌های همان پاراگراف، به ترتیب. برای هر
+  کدام یک آیتم در `blanks` بدهید (همان تعداد، همان ترتیب): ترجمه‌ی **خودِ پاسخ**، کوتاه و با
+  همان نقشِ دستوری در جمله (مثلاً `are picked` ← «چیده می‌شوند»، `niece` ← «دختر برادر/خواهر») —
+  نه کلِ جمله. اگر پاسخ فقط حرف/شماره‌ی گزینه، عدد، نام، یا کلمه‌ای است که تنها ترجمه‌ی
+  معناداری ندارد (of، the)، `{{"fa": "", "ar": ""}}`. اپ در پنجره‌ی پاسخ فقط همین را نشان
+  می‌دهد تا پاسخ‌های دیگرِ جمله لو نرود.
 - `blankNumbers` (اگر در آیتمی آمده): عددهایی که درست پیش از یک جای خالی‌اند و به احتمالِ
   زیاد فقط شماره‌ی آن جای خالی در تمرین‌اند. طبقِ قاعده‌ی «شماره‌ی جای خالی» در ترجمه
   نمی‌آیند — مگر بافت نشان دهد واقعاً جزءِ جمله‌اند.
@@ -304,6 +313,9 @@ def cmd_prepare(a):
                     item['blankNumbers'] = nums
                 if PLAIN_BLANK.search(v['src']):
                     item['plainBlank'] = True
+                answers = BLANK_ANSWER.findall(v['src'])
+                if answers:
+                    item['blankAnswers'] = answers
                 payload.append(item)
             prompt = PROMPT_HEAD.format(rules=guide_rules(), lexicon=lex_lines,
                                         context=(f'### {name}\n\n' if not a.audio else '') + context,
@@ -397,7 +409,22 @@ def cmd_merge(a):
                 warnings.append(f'{pid}: هیچ‌کدام از forms «{tid}» در متنِ پاراگراف نیست؛ حذف شد.')
                 continue
             terms.append(tid)
-        staged[info['key']] = {'src': src, 'fa': fa, 'ar': ar, 'terms': terms}
+        entry_out = {'src': src, 'fa': fa, 'ar': ar, 'terms': terms}
+        # G-8: ترجمه‌ی پاسخِ هر جای خالی (همان تعداد و ترتیبِ {blk}ها)
+        n_blanks = len(BLANK_ANSWER.findall(src))
+        blanks = t.get('blanks')
+        if n_blanks:
+            if blanks is None:
+                warnings.append(f'{pid}: {n_blanks} جای خالی دارد ولی blanks ندارد؛ پنجره‌ی پاسخ ترجمه‌ی جمله را فقط برای تک‌جای‌خالی نشان می‌دهد.')
+            elif not isinstance(blanks, list) or len(blanks) != n_blanks:
+                errors.append(f'{pid}: blanks باید دقیقاً {n_blanks} آیتم داشته باشد.')
+            else:
+                entry_out['blanks'] = [
+                    {'fa': (b.get('fa') or '').translate(NON_WESTERN_DIGITS),
+                     'ar': (b.get('ar') or '').translate(NON_WESTERN_DIGITS)}
+                    for b in blanks if isinstance(b, dict)
+                ]
+        staged[info['key']] = entry_out
 
     for w in warnings:
         print('⚠️ ', w)

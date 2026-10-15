@@ -65,6 +65,15 @@ namespace CustomLayoutGenerator
         [JsonProperty("translationAr")]
         public string TranslationAr { get; set; }
 
+        // 🌟 G-8: ترجمه‌ی جوابِ هر جای خالی، به ترتیبِ {blk}ها در متنِ پاراگراف (فیلدِ
+        // «blanks»ِ translations.json). اپ در پنجره‌ی جواب فقط ترجمه‌ی همان جواب را نشان
+        // می‌دهد، نه کلِ جمله (که جواب‌های دیگر را هم لو می‌داد). رشته‌ی خالی = این جواب
+        // ترجمه ندارد (حرف/عدد). null (و در JSON حذف) اگر داده‌ای نیست.
+        [JsonProperty("blanksFa")]
+        public List<string> BlanksFa { get; set; }
+        [JsonProperty("blanksAr")]
+        public List<string> BlanksAr { get; set; }
+
         public List<SpanData> Spans { get; set; } = new List<SpanData>();
     }
 
