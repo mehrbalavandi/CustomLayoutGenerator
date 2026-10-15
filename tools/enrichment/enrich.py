@@ -41,7 +41,7 @@ BLANK_NUMBER = re.compile(r'(?:(?<=\s)|^)\(?(\d{1,2})\)?\s*(?=\{blk\})')
 
 
 # جای خالیِ بی‌استایل: فقط خط‌تیره/زیرخط/[ ... ]/•••، بدونِ {blk} (ENRICHMENT-GUIDE، قاعده‌ی ۲-۵).
-PLAIN_BLANK = re.compile(r'-{2,}|_{2,}|\[\s*(?:\.{3}|…)\s*\]|\.{4,}|•{3,}')
+PLAIN_BLANK = re.compile(r'-{2,}|_{2,}|(?:_ ){2,}_|\[\s*(?:\.{3}|…)\s*\]|\.{4,}|•{3,}')
 
 
 def blank_numbers(text):
