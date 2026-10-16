@@ -400,8 +400,8 @@ namespace CustomLayoutGenerator
         /// G-4: Interactivesِ کتاب = مدخل‌هایی از دیکشنریِ مشترک که ترجمه‌های همین کتاب به
         /// آن‌ها اشاره کرده‌اند (terms). برای هر شکلِ مدخل (forms) هر صورتی که واقعاً در متنِ
         /// کتاب آمده (با همان بزرگی/کوچکیِ حروف؛ چون اپ دقیق تطبیق می‌دهد) یک آیتم می‌شود.
-        /// قالبِ آیتم همان InteractiveWordِ اپ است + فیلدهای تازه (ipa، pos، lexiconId) که
-        /// نسخه‌ی فعلیِ اپ نادیده می‌گیرد.
+        /// قالبِ آیتم همان InteractiveWordِ اپ است + ipa، pos، headword و lexiconId که اپ در پنجره‌ی
+        /// دیکشنری نشان می‌دهد (W-3ِ RULES-rendering).
         /// </summary>
         private static List<JObject> BuildInteractives(
             Dictionary<string, JObject> lexicon, HashSet<string> usedTerms, string bookText)
@@ -437,6 +437,7 @@ namespace CustomLayoutGenerator
                             ["cefrLevel"] = entry["cefrLevel"],
                             ["ipa"] = entry["ipa"],
                             ["pos"] = entry["pos"],
+                            ["headword"] = head,
                             ["lexiconId"] = id,
                         });
                     }
