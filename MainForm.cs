@@ -89,6 +89,61 @@ namespace CustomLayoutGenerator
         /// همین اجرا (استخراجِ چند جلدِ پشتِ‌هم را راحت‌تر می‌کند).
         private int _lastStartPageNumber = 1;
 
+        /// 🌟 SM-1: آخرین انتخابِ «نسخه‌ی نمونه» (اندیسِ Unit؛ -1 = بدونِ نمونه) — پیش‌فرضِ
+        /// دفعه‌ی بعد در همین اجرا. بارِ اول Unitِ اول.
+        private int _lastSampleIndex = 0;
+
+        /// <summary>
+        /// 🌟 SM-1: می‌پرسد نسخه‌ی نمونه از کدام Unit (گره‌ی سطحِ اولِ Outline) ساخته شود.
+        /// خروجی: اندیسِ Unit، یا -1 یعنی «نمونه نساز». بستنِ پنجره هم یعنی -1 (استخراجِ
+        /// خودِ کتاب انجام شده و نباید به‌خاطرِ این پرسش از دست برود).
+        /// </summary>
+        private static int PromptForSample(List<string> titles, int defaultIndex)
+        {
+            using (var dialog = new Form())
+            using (var label = new Label())
+            using (var combo = new System.Windows.Forms.ComboBox())
+            using (var okButton = new Button())
+            using (var cancelButton = new Button())
+            {
+                dialog.Text = "نسخه‌ی نمونه";
+                dialog.RightToLeft = RightToLeft.Yes;
+                dialog.RightToLeftLayout = true;
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+                dialog.ShowInTaskbar = false;
+                dialog.ClientSize = new System.Drawing.Size(420, 150);
+
+                label.Text = "نسخه‌ی نمونه (رایگان) از کدام درس ساخته شود؟\n" +
+                             "خروجی در پوشه‌ی sample کنارِ همین فایل نوشته می‌شود.";
+                label.AutoSize = false;
+                label.SetBounds(16, 12, 388, 40);
+
+                combo.DropDownStyle = ComboBoxStyle.DropDownList;
+                combo.Items.AddRange(titles.Cast<object>().ToArray());
+                combo.Items.Add("— نسخه‌ی نمونه ساخته نشود —");
+                combo.SelectedIndex = defaultIndex >= 0 && defaultIndex < titles.Count ? defaultIndex : titles.Count;
+                combo.SetBounds(16, 60, 388, 26);
+
+                okButton.Text = "تأیید";
+                okButton.DialogResult = DialogResult.OK;
+                okButton.SetBounds(256, 108, 70, 28);
+
+                cancelButton.Text = "بدونِ نمونه";
+                cancelButton.DialogResult = DialogResult.Cancel;
+                cancelButton.SetBounds(334, 108, 70, 28);
+
+                dialog.Controls.AddRange(new System.Windows.Forms.Control[] { label, combo, okButton, cancelButton });
+                dialog.AcceptButton = okButton;
+                dialog.CancelButton = cancelButton;
+
+                if (dialog.ShowDialog() != DialogResult.OK) return -1;
+                return combo.SelectedIndex < titles.Count ? combo.SelectedIndex : -1;
+            }
+        }
+
         /// <summary>
         /// شماره‌ی صفحه‌ی اولین صفحه‌ی تولیدشده را می‌پرسد.
         /// خروجی null یعنی کاربر انصراف داد و کلِ عملیات باید لغو شود.
@@ -228,10 +283,27 @@ namespace CustomLayoutGenerator
                         // 🌟 ۳. خروجی per-page + index.json (نسخهٔ هر صفحه = هَشِ محتوا)
                         BookOutputWriter.Write(outputDir, pages, audioScripts, enrichment.Interactives);
 
+                        // 🌟 ۴. SM-1: نسخه‌ی نمونه (یک Unit) هم‌زمان، در پوشه‌ی sample/ — از
+                        // رویِ همین خروجیِ نهایی، پس صفحه‌ها و ترجمه‌هایش عیناً همان کتاب‌اند.
+                        string sampleSummary;
+                        var units = SampleWriter.TopLevelTitles(outputDir);
+                        if (units.Count == 0)
+                        {
+                            sampleSummary = "نسخه‌ی نمونه ساخته نشد: سند فهرستِ ساختاری (Outline Level) ندارد.";
+                        }
+                        else
+                        {
+                            int choice = PromptForSample(units, _lastSampleIndex);
+                            _lastSampleIndex = choice;
+                            sampleSummary = choice < 0
+                                ? "نسخه‌ی نمونه ساخته نشد (به انتخابِ شما)."
+                                : SampleWriter.Write(outputDir, choice).Summary;
+                        }
+
                         MessageBox.Show(
                             $"کتاب با موفقیت به {pages.Count} فایلِ صفحه + index.json تبدیل شد!\n" +
                             $"شماره‌ی صفحات: {startPage.Value} تا {startPage.Value + pages.Count - 1}\n\n" +
-                            enrichment.Summary,
+                            enrichment.Summary + "\n\n" + sampleSummary,
                             "عملیات موفق", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     finally

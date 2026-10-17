@@ -40,6 +40,7 @@
 | `Numberingresolver.cs` | 208 | شماره‌گذاریِ خودکارِ لیست‌ها (`numbering.xml`). |
 | `FontResolver.cs` | 449 | تشخیصِ فونتِ مؤثرِ هر ران. |
 | `Bookoutputwriter.cs` | 214 | نوشتنِ فایل‌ها روی دیسک + نسخه‌بندی. |
+| `SampleWriter.cs` | 270 | نسخه‌ی نمونه (`sample/`) از رویِ خروجیِ نوشته‌شده: صفحه‌های یک Unit، Outlineِ کامل، بخشِ Sample (قوانینِ SM). بدونِ وابستگی به فرم، پس جدا هم اجرا و آزموده می‌شود. |
 | `ContentEnrichment.cs` | 427 | وصلِ ترجمه‌ها و کلماتِ تعاملی از حافظه‌ی ترجمه و دیکشنریِ مشترک (G-1…G-7). |
 | `tools/enrichment/` | — | راهنمای ترجمه (ENRICHMENT-GUIDE.md)، `enrich.py` (status / prepare / merge با هر هوش مصنوعی) و `dump_docx.py` (متنِ پاراگراف‌ها از docx). |
 | `WORKFLOW.md` | — | راهنمای کارِ کلِ خط‌لوله، از Word تا اپ (در مخزنِ Flutter هم یک نسخه‌ی یکسان هست). |
