@@ -122,6 +122,10 @@ namespace CustomLayoutGenerator
         public int? StartMs { get; set; }
         public int? EndMs { get; set; }
 
+        // 🌟 A-2: متنی که در فایلِ صوتی خوانده نمی‌شود (برچسبِ گوینده، استایلِ NotSpoken).
+        // زمانش می‌ماند ولی اپ هایلایتش نمی‌کند. null = گفته‌شده (در JSON نوشته نمی‌شود).
+        public bool? Unspoken { get; set; }
+
         public int? ImageWidth { get; set; }
         public int? ImageHeight { get; set; }
 

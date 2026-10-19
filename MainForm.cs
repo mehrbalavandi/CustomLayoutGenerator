@@ -500,6 +500,9 @@ namespace CustomLayoutGenerator
                 _pendingAudioSpans.Clear();
                 _pendingAudioSpanStartMs = null;
 
+                // 🌟 A-2، A-3: برچسب‌های گفته‌نشده و کلمه‌های بی‌زمان (عدد)
+                AudioScriptTiming.Apply(tracks);
+
                 // 🐞 حالتِ قدیمی (سازگاریِ رو‌به‌عقب): پاراگراف‌های سطحِ‌بالای
                 // سند که مستقیماً با [AudioStart: نام] شروع می‌شوند، همچنان
                 // پردازش می‌شوند — برای اسکریپت‌هایی که قبلاً به این روش
@@ -1601,6 +1604,9 @@ namespace CustomLayoutGenerator
             }
 
             List<string> currentMarkers = ExtractRunMarkers(run, pPr, mainPart, conditionalBold);
+            // 🌟 A-2: استایلِ کاراکتریِ «NotSpoken» = در فایلِ صوتی خوانده نمی‌شود
+            if (IsTargetStyle(runStyleId, mainPart, "NotSpoken"))
+                currentMarkers.Add(AudioScriptTiming.NotSpokenMarker);
 
             // 🌟 پس‌زمینه‌ی متن دو منبعِ کاملاً جدا در ورد دارد و تا حالا فقط
             // یکی‌اش خوانده می‌شد: w:shd (شیدینگ) خوانده می‌شد، ولی
@@ -2419,6 +2425,7 @@ namespace CustomLayoutGenerator
                 UnderlineThickness = source.UnderlineThickness,
                 UnderlineColor = source.UnderlineColor,
                 LetterSpacing = source.LetterSpacing,
+                Unspoken = source.Unspoken, // 🌟 A-2
                 Borders = source.Borders != null ? new BorderDetail { Val = source.Borders.Val, Width = source.Borders.Width, Color = source.Borders.Color } : null,
                 FloatPosition = source.FloatPosition,
                 TableStyleName = source.TableStyleName,
