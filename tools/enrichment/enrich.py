@@ -398,6 +398,16 @@ def cmd_merge(a):
         for num in blank_numbers(src):
             if num not in re.findall(r'\d+', clean_nums(src)) and re.search(rf'(?<!\d){num}(?!\d)', fa):
                 warnings.append(f'{pid}: عددِ {num} پیش از جای خالی شاید شماره‌ی سؤال باشد ولی در ترجمه آمده؛ بررسی کنید.')
+        # TR-8: پاسخِ داخلِ ترجمه هم بینِ {blk}…{/blk} است (جای خالیِ وسطِ جمله).
+        n_src = len(BLANK_ANSWER.findall(src))
+        whole_blank = src.strip().startswith('{blk}') and src.strip().endswith('{/blk}') and n_src == 1
+        for lang, txt in (('fa', fa), ('ar', ar)):
+            if txt.count('{blk}') != txt.count('{/blk}') or re.search(r'\{blk\}(?:(?!\{/blk\}).)*\{blk\}', txt, re.S):
+                errors.append(f'{pid}: {{blk}}/{{/blk}}ِ ترجمه‌ی {lang} جفت نیستند یا تودرتو‌اند.')
+            elif whole_blank and '{blk}' in txt:
+                errors.append(f'{pid}: کلِ پاراگراف پاسخ است؛ ترجمه‌ی {lang} نباید {{blk}} داشته باشد.')
+            elif n_src and not whole_blank and '{blk}' not in txt:
+                warnings.append(f'{pid}: جای خالیِ وسطِ جمله دارد ولی پاسخ در ترجمه‌ی {lang} با {{blk}} پنهان نشده؛ اگر پاسخ در ترجمه آمده، پنهانش کنید.')
         clean = src.replace('{blk}', '').replace('{/blk}', '')
         terms = []
         for tid in t.get('terms') or []:
