@@ -229,6 +229,10 @@ python enrich.py merge BOOK batch_003 answer.json
 
 ### ۶. اسکریپت‌های صوتی
 - **منبع:** همان فایلِ مارکردار (`*Audio Scripts_markers.docx`) است.
+- **`--plain-scripts`:** تا وقتی فایلِ `_markers` کامل نیست، `status` و `prepare` متن را از
+  `*Audio Scripts.docx` (بی‌مارکر) می‌خوانند: `prepare BOOK --unit "UNIT/02" --audio --plain-scripts`.
+  کلید متنِ بی‌مارکر است، پس بعد از تکمیلِ مارکرها همین ترجمه‌ها وصل می‌شوند؛ فقط جاهایی که
+  متنِ دو فایل فرق دارد (`compare_scripts.py`) دوباره در `pending.json` می‌آید.
 - **اسکریپت‌های یک Unit:** `prepare --audio --unit "UNIT/02"` فقط فایل‌های صوتیِ همان Unit را
   می‌آورد. Unitِ هر فایلِ صوتی از لینک‌های صوتیِ docxِ کتاب (هایپرلینکِ `audio:…`) پیدا
   می‌شود؛ `status` هم آن را کنارِ هر فایلِ صوتی نشان می‌دهد. روالِ پیشنهادی برای هر Unit:

@@ -93,8 +93,17 @@ def all_translated_keys(book_dir):
     return keys
 
 
+# --plain-scripts: متنِ اسکریپت‌ها از «*Audio Scripts.docx» (بی‌مارکر) — وقتی فایلِ _markers هنوز
+# کامل نیست. کلیدِ ترجمه متنِ بی‌مارکر است، پس بعد از تکمیلِ مارکرها همان ترجمه‌ها وصل می‌شوند
+# (اختلافِ متنِ دو فایل را compare_scripts.py نشان می‌دهد).
+PLAIN_SCRIPTS = False
+
+
 def book_items(book_dir, audio):
-    pattern = '*Audio Scripts_markers.docx' if audio else '*Custom*.docx'
+    if audio and PLAIN_SCRIPTS:
+        pattern = '*Audio Scripts.docx'
+    else:
+        pattern = '*Audio Scripts_markers.docx' if audio else '*Custom*.docx'
     files = [f for f in glob.glob(os.path.join(book_dir, pattern)) if not os.path.basename(f).startswith('~$')]
     if not files:
         sys.exit(f'فایلِ {pattern} در «{book_dir}» پیدا نشد.')
@@ -476,18 +485,22 @@ def main():
     sub = ap.add_subparsers(dest='cmd', required=True)
     s = sub.add_parser('status')
     s.add_argument('book')
+    s.add_argument('--plain-scripts', action='store_true')
     p = sub.add_parser('prepare')
     p.add_argument('book')
     p.add_argument('--unit')
     p.add_argument('--audio', action='store_true')
     p.add_argument('--max-items', type=int, default=80)
     p.add_argument('--from-pending', action='store_true')
+    p.add_argument('--plain-scripts', action='store_true')
     m = sub.add_parser('merge')
     m.add_argument('book')
     m.add_argument('batch')
     m.add_argument('response')
     m.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
+    global PLAIN_SCRIPTS
+    PLAIN_SCRIPTS = bool(getattr(a, 'plain_scripts', False))
     {'status': cmd_status, 'prepare': cmd_prepare, 'merge': cmd_merge}[a.cmd](a)
 
 
