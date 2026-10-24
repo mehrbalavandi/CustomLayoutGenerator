@@ -45,6 +45,14 @@ namespace CustomLayoutGenerator
         public string ListMarkerAlign { get; set; }    // "right" | "center"؛ null = left
         public string ListSuffix { get; set; }         // "space" | "nothing"؛ null = tab
         /// <summary>
+        /// 🌟 A-4: فقط در اسکریپتِ صوتی — بازه‌ی زمانیِ شماره‌ی خودکارِ لیست (وقتی گوینده «One.» را
+        /// می‌گوید). مثلِ متنِ گفته‌نشده (A-2): اپ هایلایتش نمی‌کند ولی بند در این بازه فعال است و لمسِ
+        /// شماره پلیر را به ListMarkerEndMs (شروعِ سطر) می‌برد. null (و در JSON حذف) وقتی سند مارکرِ
+        /// سرِ بند ندارد.
+        /// </summary>
+        public int? ListMarkerStartMs { get; set; }
+        public int? ListMarkerEndMs { get; set; }
+        /// <summary>
         /// 🌟 سطحِ ساختار (Outline Level) از Word: ۱ = بالاترین (مثلاً Unit)، ۲ = زیرش
         /// (مثلاً مهارت)، … null = متنِ معمولی. از pPrِ مستقیم یا زنجیره‌ی استایلِ
         /// پاراگراف (استایل‌های «Nav 1»/«Nav 2» یا Heading 1/2/…). فقط برای ساختنِ

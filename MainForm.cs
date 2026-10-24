@@ -1326,6 +1326,31 @@ namespace CustomLayoutGenerator
                     .Select(m => (Start: m.Index, End: m.Index + m.Length, Ms: MarkerMs(m)))
                     .ToList();
 
+                // 🌟 A-4: شماره‌ی خودکارِ لیست مثلِ متنِ گفته‌نشده. AudioMarkerReview/align_engine جای
+                // شماره یک کلمه‌ی «#» می‌گذارند و مارکرِ پایانش را سرِ اولِ بند می‌نویسند:
+                // «…1985.[2107]¶[2207]The». بازه‌ی [مرزِ پیش از بند، اولین مارکرِ بند] مالِ شماره است؛ اگر
+                // «#» اولین کلمه‌ی ترک باشد، دو مارکر سرِ بند است «[1007][1107]Our». سندِ پیش از A-4 مارکرِ
+                // سرِ بند ندارد و بازه‌ای ساخته نمی‌شود.
+                if (!string.IsNullOrWhiteSpace(onlyPara.ListMarker))
+                {
+                    string all = fullText.ToString();
+                    var leading = new List<int>();
+                    int at = 0;
+                    foreach (var mk in markers)
+                    {
+                        if (all.Substring(at, mk.Start - at).Trim().Length > 0) break;
+                        leading.Add(mk.Ms);
+                        at = mk.End;
+                    }
+                    int? lmStart = leading.Count >= 2 ? leading[leading.Count - 2] : _pendingAudioSpanStartMs;
+                    int? lmEnd = leading.Count >= 1 ? leading[leading.Count - 1] : (int?)null;
+                    if (lmStart != null && lmEnd != null && lmEnd > lmStart)
+                    {
+                        onlyPara.ListMarkerStartMs = lmStart;
+                        onlyPara.ListMarkerEndMs = lmEnd;
+                    }
+                }
+
                 foreach (var span in basePara.Spans)
                 {
                     if (!textRanges.TryGetValue(span, out var range))
@@ -2255,6 +2280,8 @@ namespace CustomLayoutGenerator
                 ListMarkerScale = source.ListMarkerScale,
                 ListMarkerAlign = source.ListMarkerAlign,
                 ListSuffix = source.ListSuffix,
+                ListMarkerStartMs = source.ListMarkerStartMs,
+                ListMarkerEndMs = source.ListMarkerEndMs,
                 ListTabStop = source.ListTabStop,
                 OutlineLevel = source.OutlineLevel,
                 KeepListMarkerVisible = source.KeepListMarkerVisible, // 🐞 BlkLp
