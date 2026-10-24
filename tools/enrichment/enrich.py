@@ -283,6 +283,10 @@ def cmd_prepare(a):
         for name, _ in groups:
             known.update(name.split('، '))
         for g, xs in pending_by_group.items():
+            # با --unit فقط گروه‌های همان Unit (قبلاً همه‌ی Unitها اضافه می‌شدند)
+            if a.unit and a.unit.lower() not in (
+                    (audio_units(a.book).get(g) or '') if a.audio else g).lower():
+                continue
             if g not in known:   # گروهی که در docx پیدا نشد: بدونِ بافتِ جدا
                 groups.append((g, xs))
 
