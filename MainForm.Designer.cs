@@ -29,6 +29,7 @@
         private void InitializeComponent()
         {
             btnSelectFile = new Button();
+            btnIndentLabels = new Button();
             SuspendLayout();
             // 
             // btnSelectFile
@@ -41,11 +42,22 @@
             btnSelectFile.UseVisualStyleBackColor = true;
             btnSelectFile.Click += btnSelectFile_Click;
             // 
+            // btnIndentLabels
+            // 
+            btnIndentLabels.Location = new Point(93, 415);
+            btnIndentLabels.Name = "btnIndentLabels";
+            btnIndentLabels.Size = new Size(200, 23);
+            btnIndentLabels.TabIndex = 1;
+            btnIndentLabels.Text = "Indent Speaker Labels (Audio Scripts)";
+            btnIndentLabels.UseVisualStyleBackColor = true;
+            btnIndentLabels.Click += btnIndentLabels_Click;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(btnIndentLabels);
             Controls.Add(btnSelectFile);
             Name = "Form1";
             Text = "Form1";
@@ -55,5 +67,6 @@
         #endregion
 
         private Button btnSelectFile;
+        private Button btnIndentLabels;
     }
 }

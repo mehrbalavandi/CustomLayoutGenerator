@@ -201,6 +201,91 @@ namespace CustomLayoutGenerator
             }
         }
 
+        /// <summary>
+        /// 🌟 A-5: دکمه‌ی «Indent Speaker Labels»: در فایلِ Wordِ اسکریپت‌های صوتی، بعد از برچسبِ گوینده
+        /// («Man: …») یک Tab و تورفتگیِ آویزان مثلِ لیستِ شماره‌دار (SpeakerLabelIndenter). خودِ فایل به‌روز
+        /// می‌شود و نسخه‌ی قبلی «‎.bak» می‌ماند. تعدادِ کلمه‌ها عوض نمی‌شود، پس پیش‌نویس‌های align_engine و
+        /// مارکرهای AudioMarkerReview معتبر می‌مانند.
+        /// </summary>
+        private void btnIndentLabels_Click(object sender, EventArgs e)
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Filter = "Word Documents|*.docx",
+                Title = "Audio scripts Word file (e.g. Mindset3- Audio Scripts.docx or its _markers file)"
+            };
+            if (dialog.ShowDialog() != DialogResult.OK) return;
+
+            string originalFile = dialog.FileName;
+            // ساخت فایل موقت — کنارِ خودِ فایل، تا جایگزینیِ آخر (File.Replace) روی همان درایو باشد
+            string tempFile = Path.Combine(
+                Path.GetDirectoryName(originalFile) ?? Path.GetTempPath(),
+                "~indent_" + Guid.NewGuid().ToString("N") + Path.GetExtension(originalFile));
+            try
+            {
+                File.Copy(originalFile, tempFile, true);
+
+                SpeakerLabelIndenter.Result result;
+                using (var doc = WordprocessingDocument.Open(tempFile, true))
+                {
+                    result = SpeakerLabelIndenter.Apply(doc, MeasureLabelPt);
+                    if (result.Changed) doc.MainDocumentPart.Document.Save();
+                }
+
+                string summary =
+                    $"Script tables: {result.Tables}\n" +
+                    $"Skipped (numbered/bulleted list scripts): {result.SkippedListTables}\n" +
+                    $"Tables indented: {result.IndentedTables}\n" +
+                    $"Labelled paragraphs indented: {result.Paragraphs} (new tabs: {result.TabsInserted})" +
+                    (result.CappedLabels > 0 ? $"\nLabels wider than 2.5 inch: {result.CappedLabels}" : "");
+
+                if (!result.Changed)
+                {
+                    MessageBox.Show("No speaker labels found — nothing was changed.\n\n" + summary, "Indent Speaker Labels",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                try
+                {
+                    File.Replace(tempFile, originalFile, originalFile + ".bak", true);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    MessageBox.Show($"{Path.GetFileName(originalFile)} is open in another program (probably Word).\n" +
+                                    "Close it and try again — nothing was changed.\n\n" + ex.Message,
+                        "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                MessageBox.Show($"Done: {Path.GetFileName(originalFile)}\n(previous version: {Path.GetFileName(originalFile)}.bak)\n\n" + summary,
+                    "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error: " + ex.Message, "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { /* فایلِ موقت */ }
+            }
+        }
+
+        /// <summary>A-5: پهنای برچسب به pt با همان فونت/اندازه/بولد (فونتِ نصب‌نشده ← فونتِ پیش‌فرضِ ویندوز).</summary>
+        private static double MeasureLabelPt(SpeakerLabelIndenter.LabelText label)
+        {
+            using var bmp = new System.Drawing.Bitmap(1, 1);
+            using var g = System.Drawing.Graphics.FromImage(bmp);
+            g.PageUnit = System.Drawing.GraphicsUnit.Point;
+            using var font = new System.Drawing.Font(
+                string.IsNullOrWhiteSpace(label.FontName) ? "Calibri" : label.FontName,
+                (float)label.SizePt,
+                label.Bold ? System.Drawing.FontStyle.Bold : System.Drawing.FontStyle.Regular,
+                System.Drawing.GraphicsUnit.Point);
+            return g.MeasureString(label.Text, font, System.Drawing.PointF.Empty,
+                System.Drawing.StringFormat.GenericTypographic).Width;
+        }
+
         private void btnSelectFile_Click(object sender, EventArgs e)
         {
             using (OpenFileDialog openFileDialog = new OpenFileDialog())
@@ -1331,7 +1416,10 @@ namespace CustomLayoutGenerator
                 // «…1985.[2107]¶[2207]The». بازه‌ی [مرزِ پیش از بند، اولین مارکرِ بند] مالِ شماره است؛ اگر
                 // «#» اولین کلمه‌ی ترک باشد، دو مارکر سرِ بند است «[1007][1107]Our». سندِ پیش از A-4 مارکرِ
                 // سرِ بند ندارد و بازه‌ای ساخته نمی‌شود.
-                if (!string.IsNullOrWhiteSpace(onlyPara.ListMarker))
+                // 🌟 A-4b: فقط شماره‌ی *عددی* («1:»، «2.»، «3») گفته‌شده است و بازه می‌گیرد (اپ
+                // هایلایتش می‌کند)؛ شماره‌ی غیرِعددی (بولت، «A:»، «iv.») مثلِ NotSpoken گفته‌نشده است:
+                // بازه‌ای ندارد و زمانِ سرِ بندش بی‌هایلایت می‌گذرد.
+                if (!string.IsNullOrWhiteSpace(onlyPara.ListMarker) && onlyPara.ListMarker.Any(char.IsDigit))
                 {
                     string all = fullText.ToString();
                     var leading = new List<int>();
