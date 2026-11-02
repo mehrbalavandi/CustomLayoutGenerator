@@ -95,6 +95,7 @@
 | SM-4 | **Interactives** = آیتم‌های `Interactives`ِ کتاب که `exactText`شان (دقیق، کلمه‌ی کامل) در متنِ صفحه‌ها و اسکریپت‌های نمونه آمده. | `Write` |
 | SM-5 | **`sample/index.json`:** همان شکلِ index.jsonِ کتاب، با `Pages`/`AudioScripts`/`AudioLinksIndex`ِ فیلترشده، `BookVersion` = هَشِ نسخه‌ی صفحه‌های نمونه، **`Outline`ِ کامل** (همه‌ی Unitها، تا اپ آن‌ها را نشان دهد و برای بقیه «خریداری نشده» بگوید — N-12ِ RULES-rendering)، و بخشِ تازه‌ی `Sample`: `{Title, FirstPage, LastPage, BookFirstPage, BookLastPage}`. | `Write` |
 | SM-6 | پیش از نوشتن، فقط چیزهایی از `sample/` پاک می‌شود که خودِ برنامه می‌سازد (`index.json`، `pages/`، `audio_scripts/`، `images/`، `audio/`) تا فایلِ کهنه‌ی نمونه‌ی قبلی نماند. سایت (SMP-1ِ بک‌اند) هم موقعِ آپلود فایل‌های بی‌ارجاع را پاک می‌کند. | `CleanSampleDir` |
+| SM-7 | **جلد در نمونه:** اگر کنارِ docx فایلِ `cover.jpg|jpeg|png|webp` هست، در `sample/` هم کپی می‌شود (نامِ کوچک). سایت (SF-6) آن را از هر آرشیوِ آپلودی جلدِ کتاب می‌کند و در همه‌ی آرشیوهای دانلود/توزیع می‌گذارد. نبودنش در خلاصه‌ی پایان هشدار دارد. | `SampleWriter.Write` |
 
 ## G — غنی‌سازی (ترجمه و کلمات تعاملی)
 

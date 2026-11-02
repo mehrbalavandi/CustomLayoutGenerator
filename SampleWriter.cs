@@ -185,6 +185,13 @@ namespace CustomLayoutGenerator
             File.WriteAllText(Path.Combine(sampleDir, "index.json"),
                 sampleIndex.ToString(Formatting.Indented), new UTF8Encoding(false));
 
+            // 🌟 SM-7: جلدِ کتاب (cover.jpg|jpeg|png|webp کنارِ docx) در پوشه‌ی نمونه هم — سایت آن را جلدِ کتاب
+            // می‌کند و نمونه‌ای که جدا (تلگرام، انتقال) پخش می‌شود هم جلد دارد.
+            string cover = new[] { "cover.jpg", "cover.jpeg", "cover.png", "cover.webp" }
+                .Select(n => Path.Combine(outputDir, n)).FirstOrDefault(File.Exists);
+            if (cover != null)
+                File.Copy(cover, Path.Combine(sampleDir, Path.GetFileName(cover).ToLowerInvariant()), true);
+
             result.Written = true;
             result.Title = (string)chosen["Title"];
             result.FirstPage = first;
@@ -197,6 +204,7 @@ namespace CustomLayoutGenerator
             sb.Append($"نسخه‌ی نمونه: «{result.Title}» — صفحه‌های {first} تا {last} ({result.PageCount} صفحه)، ");
             sb.Append($"{result.AudioScriptCount} اسکریپتِ صوتی، {result.ImageCount} عکس، {result.AudioFileCount} فایلِ صوتی، ");
             sb.Append($"{result.InteractiveCount} کلمه‌ی تعاملی ← پوشه‌ی {FolderName}");
+            sb.Append(cover != null ? $"، جلد: {Path.GetFileName(cover)}" : "\n⚠️ cover.jpg/png کنارِ docx نیست؛ نمونه بی‌جلد ساخته شد.");
             if (result.MissingAudio.Count > 0)
                 sb.Append($"\n⚠️ {result.MissingAudio.Count} فایلِ صوتیِ نمونه در پوشه‌ی audio/ِ کنارِ docx پیدا نشد (بعداً دستی در sample\\audio بگذارید): "
                           + string.Join("، ", result.MissingAudio.Take(8)) + (result.MissingAudio.Count > 8 ? "، …" : ""));
