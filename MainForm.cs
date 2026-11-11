@@ -3530,6 +3530,120 @@ namespace CustomLayoutGenerator
                 tcMargin?.GetFirstChild<EndMargin>(),
                 tblMargin?.GetFirstChild<EndMargin>());
         }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            using var dialog = new OpenFileDialog
+            {
+                Filter = "Word Documents|*.docx",
+                Title = "Audio scripts Word file (e.g. Mindset3- Audio Scripts.docx or its _markers file)"
+            };
+            if (dialog.ShowDialog() != DialogResult.OK) return;
+
+            string originalFile = dialog.FileName;
+            // ساخت فایل موقت — کنارِ خودِ فایل، تا جایگزینیِ آخر (File.Replace) روی همان درایو باشد
+            string tempFile = Path.Combine(
+                Path.GetDirectoryName(originalFile) ?? Path.GetTempPath(),
+                "~indent_" + Guid.NewGuid().ToString("N") + Path.GetExtension(originalFile));
+            try
+            {
+                File.Copy(originalFile, tempFile, true);
+
+                SpeakerLabelIndenter.Result result;
+                using (var doc = WordprocessingDocument.Open(tempFile, true))
+                {
+                    result = SpeakerLabelIndenter.Apply(doc, MeasureLabelPt);
+                    if (result.Changed) doc.MainDocumentPart.Document.Save();
+                }
+
+                string summary =
+                    $"Script tables: {result.Tables}\n" +
+                    $"Skipped (numbered/bulleted list scripts): {result.SkippedListTables}\n" +
+                    $"Tables indented: {result.IndentedTables}\n" +
+                    $"Labelled paragraphs indented: {result.Paragraphs} (new tabs: {result.TabsInserted})" +
+                    (result.CappedLabels > 0 ? $"\nLabels wider than 2.5 inch: {result.CappedLabels}" : "");
+
+                if (!result.Changed)
+                {
+                    MessageBox.Show("No speaker labels found — nothing was changed.\n\n" + summary, "Indent Speaker Labels",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                try
+                {
+                    File.Replace(tempFile, originalFile, originalFile + ".bak", true);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    MessageBox.Show($"{Path.GetFileName(originalFile)} is open in another program (probably Word).\n" +
+                                    "Close it and try again — nothing was changed.\n\n" + ex.Message,
+                        "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                MessageBox.Show($"Done: {Path.GetFileName(originalFile)}\n(previous version: {Path.GetFileName(originalFile)}.bak)\n\n" + summary,
+                    "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error: " + ex.Message, "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { /* فایلِ موقت */ }
+            }
+        }
+        private void MergeParagraphsByStyle(string filePath, string targetStyleId)
+        {
+            // باز کردن فایل ورد با دسترسی ویرایش
+            using (WordprocessingDocument doc = WordprocessingDocument.Open(filePath, true))
+            {
+                Body body = doc.MainDocumentPart.Document.Body;
+                var paragraphs = body.Elements<Paragraph>().ToList();
+
+                for (int i = 0; i < paragraphs.Count - 1; i++)
+                {
+                    Paragraph currentPara = paragraphs[i];
+                    Paragraph nextPara = paragraphs[i + 1];
+
+                    // بررسی استایل پاراگراف فعلی
+                    string currentStyle = currentPara.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+
+                    if (currentStyle != null && currentStyle.Equals(targetStyleId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        // ۱. ساخت یک Run جدید برای اضافه کردن ": " با حفظ فرمت انتهای پاراگراف اول
+                        Run separatorRun = new Run();
+                        Run lastRunOfCurrent = currentPara.Elements<Run>().LastOrDefault();
+
+                        // کپی کردن استایل متنی پاراگراف اول برای دو نقطه
+                        if (lastRunOfCurrent?.RunProperties != null)
+                        {
+                            separatorRun.RunProperties = (RunProperties)lastRunOfCurrent.RunProperties.CloneNode(true);
+                        }
+                        separatorRun.Append(new Text(": ") { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve });
+                        currentPara.Append(separatorRun);
+
+                        // ۲. انتقال تمام محتوای پاراگراف بعدی (شامل متن‌ها و استایل‌هایشان) به پاراگراف اول
+                        var elementsToMove = nextPara.Elements().Where(e => !(e is ParagraphProperties)).ToList();
+                        foreach (var element in elementsToMove)
+                        {
+                            element.Remove(); // جدا کردن از پاراگراف دوم
+                            currentPara.Append(element); // چسباندن به انتهای پاراگراف اول
+                        }
+
+                        // ۳. حذف پاراگراف دوم (که اکنون خالی شده است)
+                        nextPara.Remove();
+
+                        // به‌روزرسانی لیست پاراگراف‌ها برای جلوگیری از خطا در ادامه حلقه
+                        paragraphs.RemoveAt(i + 1);
+                    }
+                }
+
+                // ذخیره تغییرات در فایل
+                doc.MainDocumentPart.Document.Save();
+            }
+        }
     }
 
 

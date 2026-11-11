@@ -30,6 +30,7 @@
         {
             btnSelectFile = new Button();
             btnIndentLabels = new Button();
+            button1 = new Button();
             SuspendLayout();
             // 
             // btnSelectFile
@@ -44,29 +45,43 @@
             // 
             // btnIndentLabels
             // 
+            btnIndentLabels.AutoSize = true;
             btnIndentLabels.Location = new Point(93, 415);
             btnIndentLabels.Name = "btnIndentLabels";
-            btnIndentLabels.Size = new Size(200, 23);
+            btnIndentLabels.Size = new Size(212, 25);
             btnIndentLabels.TabIndex = 1;
             btnIndentLabels.Text = "Indent Speaker Labels (Audio Scripts)";
             btnIndentLabels.UseVisualStyleBackColor = true;
             btnIndentLabels.Click += btnIndentLabels_Click;
             // 
-            // Form1
+            // button1
+            // 
+            button1.Location = new Point(311, 417);
+            button1.Name = "button1";
+            button1.Size = new Size(200, 23);
+            button1.TabIndex = 2;
+            button1.Text = "Indent Speaker Labels 2";
+            button1.UseVisualStyleBackColor = true;
+            button1.Click += button1_Click;
+            // 
+            // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(button1);
             Controls.Add(btnIndentLabels);
             Controls.Add(btnSelectFile);
-            Name = "Form1";
+            Name = "MainForm";
             Text = "Form1";
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
 
         private Button btnSelectFile;
         private Button btnIndentLabels;
+        private Button button1;
     }
 }
