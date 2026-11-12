@@ -30,7 +30,7 @@
         {
             btnSelectFile = new Button();
             btnIndentLabels = new Button();
-            button1 = new Button();
+            btnMergeSpeaker = new Button();
             SuspendLayout();
             // 
             // btnSelectFile
@@ -54,22 +54,22 @@
             btnIndentLabels.UseVisualStyleBackColor = true;
             btnIndentLabels.Click += btnIndentLabels_Click;
             // 
-            // button1
+            // btnMergeSpeaker
             // 
-            button1.Location = new Point(311, 417);
-            button1.Name = "button1";
-            button1.Size = new Size(200, 23);
-            button1.TabIndex = 2;
-            button1.Text = "Indent Speaker Labels 2";
-            button1.UseVisualStyleBackColor = true;
-            button1.Click += button1_Click;
+            btnMergeSpeaker.Location = new Point(311, 417);
+            btnMergeSpeaker.Name = "btnMergeSpeaker";
+            btnMergeSpeaker.Size = new Size(200, 23);
+            btnMergeSpeaker.TabIndex = 2;
+            btnMergeSpeaker.Text = "Merge Speaker";
+            btnMergeSpeaker.UseVisualStyleBackColor = true;
+            btnMergeSpeaker.Click += btnMergeSpeaker_Click;
             // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
-            Controls.Add(button1);
+            Controls.Add(btnMergeSpeaker);
             Controls.Add(btnIndentLabels);
             Controls.Add(btnSelectFile);
             Name = "MainForm";
@@ -82,6 +82,6 @@
 
         private Button btnSelectFile;
         private Button btnIndentLabels;
-        private Button button1;
+        private Button btnMergeSpeaker;
     }
 }

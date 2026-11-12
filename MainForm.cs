@@ -3531,117 +3531,177 @@ namespace CustomLayoutGenerator
                 tblMargin?.GetFirstChild<EndMargin>());
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        private void btnMergeSpeaker_Click(object sender, EventArgs e)
         {
             using var dialog = new OpenFileDialog
             {
-                Filter = "Word Documents|*.docx",
-                Title = "Audio scripts Word file (e.g. Mindset3- Audio Scripts.docx or its _markers file)"
+                Title = "انتخاب فایل Word",
+                Filter = "Word Document (*.docx)|*.docx",
+                CheckFileExists = true,
+                Multiselect = false
             };
-            if (dialog.ShowDialog() != DialogResult.OK) return;
 
-            string originalFile = dialog.FileName;
-            // ساخت فایل موقت — کنارِ خودِ فایل، تا جایگزینیِ آخر (File.Replace) روی همان درایو باشد
-            string tempFile = Path.Combine(
-                Path.GetDirectoryName(originalFile) ?? Path.GetTempPath(),
-                "~indent_" + Guid.NewGuid().ToString("N") + Path.GetExtension(originalFile));
+            if (dialog.ShowDialog() != DialogResult.OK)
+                return; // کاربر انصراف داد
+
+            string inputPath = dialog.FileName;
+
+            // خروجی کنار فایل اصلی با پسوند _merged ذخیره می‌شود؛ فایل اصلی دست‌نخورده می‌ماند
+            string outputPath = Path.Combine(
+                Path.GetDirectoryName(inputPath)!,
+                Path.GetFileNameWithoutExtension(inputPath) + "_merged.docx");
+
             try
             {
-                File.Copy(originalFile, tempFile, true);
+                File.Copy(inputPath, outputPath, overwrite: true);
 
-                SpeakerLabelIndenter.Result result;
-                using (var doc = WordprocessingDocument.Open(tempFile, true))
+                int count;
+                using (var doc = WordprocessingDocument.Open(outputPath, true))
                 {
-                    result = SpeakerLabelIndenter.Apply(doc, MeasureLabelPt);
-                    if (result.Changed) doc.MainDocumentPart.Document.Save();
+                    count = SpeakerMerger.Process(doc, "NotSpoken");
                 }
 
-                string summary =
-                    $"Script tables: {result.Tables}\n" +
-                    $"Skipped (numbered/bulleted list scripts): {result.SkippedListTables}\n" +
-                    $"Tables indented: {result.IndentedTables}\n" +
-                    $"Labelled paragraphs indented: {result.Paragraphs} (new tabs: {result.TabsInserted})" +
-                    (result.CappedLabels > 0 ? $"\nLabels wider than 2.5 inch: {result.CappedLabels}" : "");
-
-                if (!result.Changed)
-                {
-                    MessageBox.Show("No speaker labels found — nothing was changed.\n\n" + summary, "Indent Speaker Labels",
-                        MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    return;
-                }
-
-                try
-                {
-                    File.Replace(tempFile, originalFile, originalFile + ".bak", true);
-                }
-                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
-                {
-                    MessageBox.Show($"{Path.GetFileName(originalFile)} is open in another program (probably Word).\n" +
-                                    "Close it and try again — nothing was changed.\n\n" + ex.Message,
-                        "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-
-                MessageBox.Show($"Done: {Path.GetFileName(originalFile)}\n(previous version: {Path.GetFileName(originalFile)}.bak)\n\n" + summary,
-                    "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(
+                    $"تعداد پاراگراف‌های ادغام‌شده: {count}\n\nفایل خروجی:\n{outputPath}",
+                    "انجام شد",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (IOException ex)
+            {
+                // معمولاً یعنی فایل در Word باز است
+                MessageBox.Show(
+                    "دسترسی به فایل ممکن نیست. اگر فایل در Word باز است آن را ببندید و دوباره تلاش کنید.\n\n" + ex.Message,
+                    "خطا",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error: " + ex.Message, "Indent Speaker Labels", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { /* فایلِ موقت */ }
+                MessageBox.Show(
+                    ex.Message,
+                    "خطا",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
             }
         }
-        private void MergeParagraphsByStyle(string filePath, string targetStyleId)
+        private void ProcessParagraphsInContainer(OpenXmlElement container, string targetStyleName, WordprocessingDocument doc)
         {
-            // باز کردن فایل ورد با دسترسی ویرایش
-            using (WordprocessingDocument doc = WordprocessingDocument.Open(filePath, true))
+            var paragraphs = container.Elements<Paragraph>().ToList();
+
+            for (int i = 0; i < paragraphs.Count - 1; i++)
             {
-                Body body = doc.MainDocumentPart.Document.Body;
-                var paragraphs = body.Elements<Paragraph>().ToList();
+                Paragraph currentP = paragraphs[i];
 
-                for (int i = 0; i < paragraphs.Count - 1; i++)
+                // بررسی استایل پاراگراف فعلی
+                string currentStyle = currentP.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+
+                if (currentStyle == targetStyleName)
                 {
-                    Paragraph currentPara = paragraphs[i];
-                    Paragraph nextPara = paragraphs[i + 1];
+                    string text = currentP.InnerText.Trim();
 
-                    // بررسی استایل پاراگراف فعلی
-                    string currentStyle = currentPara.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
-
-                    if (currentStyle != null && currentStyle.Equals(targetStyleId, StringComparison.OrdinalIgnoreCase))
+                    if (!string.IsNullOrEmpty(text) && !text.EndsWith(".") && !text.EndsWith(":"))
                     {
-                        // ۱. ساخت یک Run جدید برای اضافه کردن ": " با حفظ فرمت انتهای پاراگراف اول
-                        Run separatorRun = new Run();
-                        Run lastRunOfCurrent = currentPara.Elements<Run>().LastOrDefault();
+                        Paragraph nextP = paragraphs[i + 1];
 
-                        // کپی کردن استایل متنی پاراگراف اول برای دو نقطه
-                        if (lastRunOfCurrent?.RunProperties != null)
-                        {
-                            separatorRun.RunProperties = (RunProperties)lastRunOfCurrent.RunProperties.CloneNode(true);
-                        }
-                        separatorRun.Append(new Text(": ") { Space = DocumentFormat.OpenXml.SpaceProcessingModeValues.Preserve });
-                        currentPara.Append(separatorRun);
+                        // الف) درج دو نقطه و فاصله با حفظ فاصله خالی
+                        Text colonText = new Text(": ");
+                        colonText.Space = SpaceProcessingModeValues.Preserve;
+                        Run colonRun = new Run(colonText);
+                        currentP.AppendChild(colonRun);
 
-                        // ۲. انتقال تمام محتوای پاراگراف بعدی (شامل متن‌ها و استایل‌هایشان) به پاراگراف اول
-                        var elementsToMove = nextPara.Elements().Where(e => !(e is ParagraphProperties)).ToList();
-                        foreach (var element in elementsToMove)
+                        // ب) استخراج هوشمند و کامل ظاهر استایل پاراگراف دوم (با در نظر گرفتن ارث‌بری BasedOn)
+                        string nextStyleId = nextP.ParagraphProperties?.ParagraphStyleId?.Val?.Value;
+                        if (string.IsNullOrEmpty(nextStyleId)) nextStyleId = "Normal";
+
+                        RunProperties styleRunPr = null;
+                        if (doc.MainDocumentPart.StyleDefinitionsPart != null)
                         {
-                            element.Remove(); // جدا کردن از پاراگراف دوم
-                            currentPara.Append(element); // چسباندن به انتهای پاراگراف اول
+                            styleRunPr = GetEffectiveRunProperties(nextStyleId, doc.MainDocumentPart.StyleDefinitionsPart);
                         }
 
-                        // ۳. حذف پاراگراف دوم (که اکنون خالی شده است)
-                        nextPara.Remove();
+                        // ج) انتقال امن Runهای پاراگراف دوم و تزریق ویژگی‌های ظاهری مستقیم به آن‌ها
+                        var nextRuns = nextP.Elements<Run>().ToArray();
+                        foreach (var run in nextRuns)
+                        {
+                            var rPr = run.GetFirstChild<RunProperties>();
 
-                        // به‌روزرسانی لیست پاراگراف‌ها برای جلوگیری از خطا در ادامه حلقه
+                            if (rPr == null)
+                            {
+                                if (styleRunPr != null)
+                                {
+                                    run.PrependChild((RunProperties)styleRunPr.CloneNode(true));
+                                }
+                            }
+                            else
+                            {
+                                // اگر متن خودش ویژگی داشت، ویژگی‌های استایل والد را هم برای ثبات ظاهر به آن اضافه می‌کنیم
+                                if (styleRunPr != null)
+                                {
+                                    foreach (var child in styleRunPr.Elements())
+                                    {
+                                        if (rPr.Elements().All(e => e.GetType() != child.GetType()))
+                                        {
+                                            rPr.AppendChild(child.CloneNode(true));
+                                        }
+                                    }
+                                }
+                            }
+
+                            nextP.RemoveChild(run);
+                            currentP.AppendChild(run);
+                        }
+
+                        // د) حذف پاراگراف خالی بعدی
+                        container.RemoveChild(nextP);
+
+                        // حذف از لیست محلی برای جلوگیری از خطای ایندکس
                         paragraphs.RemoveAt(i + 1);
                     }
                 }
+            }
+        }
 
-                // ذخیره تغییرات در فایل
-                doc.MainDocumentPart.Document.Save();
+        // متد کمکی برای دنبال کردن زنجیره BasedOn استایل‌ها و استخراج ظاهر نهایی متن
+        private RunProperties GetEffectiveRunProperties(string styleId, StyleDefinitionsPart stylesPart)
+        {
+            var collectedProps = new List<StyleRunProperties>();
+            CollectStyleRunProperties(styleId, stylesPart, collectedProps);
+
+            var finalRPr = new RunProperties();
+            foreach (var sPr in collectedProps)
+            {
+                foreach (var child in sPr.Elements())
+                {
+                    var existing = finalRPr.Elements().FirstOrDefault(e => e.GetType() == child.GetType());
+                    if (existing != null)
+                    {
+                        existing.Remove();
+                    }
+                    finalRPr.AppendChild(child.CloneNode(true));
+                }
+            }
+
+            return finalRPr.Elements().Any() ? finalRPr : null;
+        }
+
+        private void CollectStyleRunProperties(string styleId, StyleDefinitionsPart stylesPart, List<StyleRunProperties> collectedProps)
+        {
+            if (string.IsNullOrEmpty(styleId) || stylesPart == null) return;
+
+            var style = stylesPart.Styles.Elements<Style>().FirstOrDefault(s => s.StyleId == styleId);
+            if (style == null) return;
+
+            // اگر این استایل از استایل دیگری ارث‌بری می‌کند، ابتدا ویژگی‌های والد را می‌گیریم
+            var basedOn = style.BasedOn?.Val?.Value;
+            if (!string.IsNullOrEmpty(basedOn))
+            {
+                CollectStyleRunProperties(basedOn, stylesPart, collectedProps);
+            }
+
+            if (style.StyleRunProperties != null)
+            {
+                collectedProps.Add(style.StyleRunProperties);
             }
         }
     }
