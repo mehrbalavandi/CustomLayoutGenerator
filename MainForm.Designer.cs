@@ -62,7 +62,7 @@
             btnMergeSpeaker.TabIndex = 2;
             btnMergeSpeaker.Text = "Merge Speaker";
             btnMergeSpeaker.UseVisualStyleBackColor = true;
-            btnMergeSpeaker.Click += btnMergeSpeaker_Click;
+            btnMergeSpeaker.Click += btnMerge_Click;
             // 
             // MainForm
             // 

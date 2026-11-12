@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using YourApp;
 
 namespace CustomLayoutGenerator
 {
@@ -3531,8 +3532,9 @@ namespace CustomLayoutGenerator
                 tblMargin?.GetFirstChild<EndMargin>());
         }
 
-        private void btnMergeSpeaker_Click(object sender, EventArgs e)
+        private void btnMerge_Click(object sender, EventArgs e)
         {
+            // انتخاب فایل Word با OpenFileDialog
             using var dialog = new OpenFileDialog
             {
                 Title = "انتخاب فایل Word",
@@ -3541,48 +3543,39 @@ namespace CustomLayoutGenerator
                 Multiselect = false
             };
 
-            if (dialog.ShowDialog() != DialogResult.OK)
+            if (dialog.ShowDialog(this) != DialogResult.OK)
                 return; // کاربر انصراف داد
 
             string inputPath = dialog.FileName;
 
-            // خروجی کنار فایل اصلی با پسوند _merged ذخیره می‌شود؛ فایل اصلی دست‌نخورده می‌ماند
+            // خروجی کنار فایل اصلی ذخیره می‌شود؛ فایل اصلی دست‌نخورده می‌ماند
             string outputPath = Path.Combine(
                 Path.GetDirectoryName(inputPath)!,
                 Path.GetFileNameWithoutExtension(inputPath) + "_merged.docx");
 
             try
             {
-                File.Copy(inputPath, outputPath, overwrite: true);
-
-                int count;
-                using (var doc = WordprocessingDocument.Open(outputPath, true))
-                {
-                    count = SpeakerMerger.Process(doc, "NotSpoken");
-                }
+                Cursor = Cursors.WaitCursor;
+                int count = SpeakerMerger.MergeFile(inputPath, outputPath, "NotSpoken");
 
                 MessageBox.Show(
                     $"تعداد پاراگراف‌های ادغام‌شده: {count}\n\nفایل خروجی:\n{outputPath}",
-                    "انجام شد",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
+                    "انجام شد", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (IOException ex)
             {
                 // معمولاً یعنی فایل در Word باز است
                 MessageBox.Show(
                     "دسترسی به فایل ممکن نیست. اگر فایل در Word باز است آن را ببندید و دوباره تلاش کنید.\n\n" + ex.Message,
-                    "خطا",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    ex.Message,
-                    "خطا",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                MessageBox.Show(ex.Message, "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
             }
         }
         private void ProcessParagraphsInContainer(OpenXmlElement container, string targetStyleName, WordprocessingDocument doc)
