@@ -31,6 +31,8 @@
             btnSelectFile = new Button();
             btnIndentLabels = new Button();
             btnMergeSpeaker = new Button();
+            btnApplyAndMerge = new Button();
+            txtSpeakers = new TextBox();
             SuspendLayout();
             // 
             // btnSelectFile
@@ -56,19 +58,39 @@
             // 
             // btnMergeSpeaker
             // 
-            btnMergeSpeaker.Location = new Point(311, 417);
+            btnMergeSpeaker.Location = new Point(12, 12);
             btnMergeSpeaker.Name = "btnMergeSpeaker";
             btnMergeSpeaker.Size = new Size(200, 23);
             btnMergeSpeaker.TabIndex = 2;
-            btnMergeSpeaker.Text = "Merge Speaker";
+            btnMergeSpeaker.Text = "ادغام گوینده‌ها";
             btnMergeSpeaker.UseVisualStyleBackColor = true;
             btnMergeSpeaker.Click += btnMerge_Click;
+            // 
+            // btnApplyAndMerge
+            // 
+            btnApplyAndMerge.Location = new Point(12, 72);
+            btnApplyAndMerge.Name = "btnApplyAndMerge";
+            btnApplyAndMerge.Size = new Size(200, 23);
+            btnApplyAndMerge.TabIndex = 4;
+            btnApplyAndMerge.Text = "تعریف و ادغام گوینده";
+            btnApplyAndMerge.UseVisualStyleBackColor = true;
+            btnApplyAndMerge.Click += btnApplyAndMerge_Click;
+            // 
+            // txtSpeakers
+            // 
+            txtSpeakers.Location = new Point(12, 101);
+            txtSpeakers.Name = "txtSpeakers";
+            txtSpeakers.PlaceholderText = "Examiner; Candidate; Student A";
+            txtSpeakers.Size = new Size(776, 23);
+            txtSpeakers.TabIndex = 6;
             // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(txtSpeakers);
+            Controls.Add(btnApplyAndMerge);
             Controls.Add(btnMergeSpeaker);
             Controls.Add(btnIndentLabels);
             Controls.Add(btnSelectFile);
@@ -83,5 +105,7 @@
         private Button btnSelectFile;
         private Button btnIndentLabels;
         private Button btnMergeSpeaker;
+        private Button btnApplyAndMerge;
+        private TextBox txtSpeakers;
     }
 }

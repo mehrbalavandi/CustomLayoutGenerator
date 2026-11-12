@@ -1,4 +1,5 @@
-﻿using DocumentFormat.OpenXml;
+﻿using System.Text.RegularExpressions;
+using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
@@ -19,36 +20,88 @@ public static class SpeakerMerger
         "specVanish","oMath"
     };
 
+    // ───────────────────────── نقطه‌های ورود (برای فرم) ─────────────────────────
+
     /// <summary>
-    /// از فایل ورودی یک کپی می‌سازد، پاراگراف‌ها را ادغام می‌کند و تعداد ادغام‌ها را برمی‌گرداند.
+    /// دکمه‌ی اول: همه‌ی پاراگراف‌های دارای استایل NotSpoken را با پاراگراف بعدی ادغام می‌کند.
     /// </summary>
     public static int MergeFile(string inputPath, string outputPath, string styleName)
     {
         File.Copy(inputPath, outputPath, overwrite: true);
         using var doc = WordprocessingDocument.Open(outputPath, true);
-        return Process(doc, styleName);
+
+        var (main, styles, speakerStyle) = Prepare(doc, styleName);
+        return MergeCore(main, styles, speakerStyle, styleName, candidates: null);
     }
 
-    static int Process(WordprocessingDocument doc, string styleName)
+    /// <summary>
+    /// دکمه‌ی دوم: به پاراگراف‌هایی که متنشان با یکی از speakerTexts برابر است استایل NotSpoken
+    /// می‌دهد و سپس فقط روی همین پاراگراف‌ها ادغام با پاراگراف بعدی را انجام می‌دهد.
+    /// </summary>
+    public static (int Matched, int Merged) ApplyStyleAndMergeFile(
+        string inputPath, string outputPath, string styleName, IEnumerable<string> speakerTexts)
+    {
+        var wanted = new HashSet<string>(
+            speakerTexts.Select(Normalize).Where(s => s.Length > 0),
+            StringComparer.OrdinalIgnoreCase);
+
+        File.Copy(inputPath, outputPath, overwrite: true);
+        using var doc = WordprocessingDocument.Open(outputPath, true);
+
+        var (main, styles, speakerStyle) = Prepare(doc, styleName);
+        string styleId = speakerStyle.StyleId!.Value!;
+
+        // مرحله ۱: پیدا کردن پاراگراف‌های هم‌متن با مقادیر TextBox و دادن استایل NotSpoken
+        var matched = new List<Paragraph>();
+        foreach (var p in main.Document!.Body!.Descendants<Paragraph>().ToList())
+        {
+            if (!wanted.Contains(Normalize(p.InnerText))) continue;
+
+            var pPr = p.ParagraphProperties;
+            if (pPr == null)
+            {
+                pPr = new ParagraphProperties();
+                p.PrependChild(pPr); // ParagraphProperties باید اولین فرزند پاراگراف باشد
+            }
+            pPr.ParagraphStyleId = new ParagraphStyleId { Val = styleId };
+
+            matched.Add(p);
+        }
+
+        // مرحله ۲: ادغام فقط روی پاراگراف‌های تطبیق‌یافته
+        int merged = MergeCore(main, styles, speakerStyle, styleName, matched);
+        return (matched.Count, merged);
+    }
+
+    // ───────────────────────── منطق مشترک ─────────────────────────
+
+    // باز کردن بخش‌های لازم و پیدا کردن استایل پاراگرافی گوینده از روی نام (یا شناسه)
+    static (MainDocumentPart Main, Styles Styles, Style SpeakerStyle) Prepare(
+        WordprocessingDocument doc, string styleName)
     {
         var main = doc.MainDocumentPart!;
         var styles = main.StyleDefinitionsPart?.Styles
             ?? throw new Exception("فایل بخش استایل ندارد.");
 
-        // پیدا کردن استایل پاراگرافی گوینده از روی نام (یا شناسه)
         var speakerStyle = styles.Elements<Style>().FirstOrDefault(s =>
             s.Type?.Value == StyleValues.Paragraph &&
             (string.Equals(s.StyleName?.Val?.Value, styleName, StringComparison.OrdinalIgnoreCase) ||
              string.Equals(s.StyleId?.Value, styleName, StringComparison.OrdinalIgnoreCase)))
             ?? throw new Exception($"استایل پاراگرافی با نام «{styleName}» در این فایل پیدا نشد.");
 
-        string styleId = speakerStyle.StyleId!.Value!;
+        return (main, styles, speakerStyle);
+    }
 
-        // استایل کاراکتری معادل NotSpoken (موجود را پیدا می‌کند یا می‌سازد)
-        string charStyleId = EnsureCharacterStyle(styles, speakerStyle, styleName);
+    // candidates == null یعنی همه‌ی پاراگراف‌های سند بررسی شوند
+    static int MergeCore(MainDocumentPart main, Styles styles, Style speakerStyle,
+                         string styleName, IReadOnlyList<Paragraph>? candidates)
+    {
+        string styleId = speakerStyle.StyleId!.Value!;
+        string? charStyleId = null; // فقط در صورت نیاز ساخته می‌شود
 
         // لیست را از قبل می‌گیریم چون حین کار پاراگراف حذف می‌کنیم
-        var paragraphs = main.Document!.Body!.Descendants<Paragraph>().ToList();
+        var paragraphs = candidates?.ToList()
+            ?? main.Document!.Body!.Descendants<Paragraph>().ToList();
         int merged = 0;
 
         foreach (var p in paragraphs)
@@ -65,17 +118,28 @@ public static class SpeakerMerger
             if (HasStyle(next, styleId)) continue;           // بعدی هم گوینده است
             if (next.InnerText.Trim().Length == 0) continue; // بعدی خالی است
 
+            // استایل کاراکتری معادل NotSpoken (موجود را پیدا می‌کند یا می‌سازد)
+            charStyleId ??= EnsureCharacterStyle(styles, speakerStyle, styleName);
+
             MergeInto(p, next, charStyleId);
             merged++;
         }
 
         styles.Save();
-        main.Document.Save();
+        main.Document!.Save();
         return merged;
     }
 
     static bool HasStyle(Paragraph p, string styleId) =>
         p.ParagraphProperties?.ParagraphStyleId?.Val?.Value == styleId;
+
+    // نرمال‌سازی متن برای مقایسه: حذف LRM/RLM، یکسان‌سازی ی و ک، جمع کردن فاصله‌ها
+    static string Normalize(string s)
+    {
+        s = s.Replace("\u200E", "").Replace("\u200F", "")
+             .Replace('ي', 'ی').Replace('ك', 'ک');
+        return Regex.Replace(s, @"\s+", " ").Trim();
+    }
 
     static void MergeInto(Paragraph speaker, Paragraph next, string charStyleId)
     {
