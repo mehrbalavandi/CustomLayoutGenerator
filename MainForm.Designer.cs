@@ -72,7 +72,7 @@
             // 
             // btnApplyAndMerge
             // 
-            btnApplyAndMerge.Location = new Point(12, 200);
+            btnApplyAndMerge.Location = new Point(12, 169);
             btnApplyAndMerge.Name = "btnApplyAndMerge";
             btnApplyAndMerge.Size = new Size(200, 23);
             btnApplyAndMerge.TabIndex = 4;
@@ -83,7 +83,7 @@
             // btnJoin
             // 
             btnJoin.AutoSize = true;
-            btnJoin.Location = new Point(12, 169);
+            btnJoin.Location = new Point(12, 198);
             btnJoin.Name = "btnJoin";
             btnJoin.Size = new Size(223, 25);
             btnJoin.TabIndex = 7;
@@ -94,7 +94,7 @@
             // chkJoinRelaxed
             // 
             chkJoinRelaxed.AutoSize = true;
-            chkJoinRelaxed.Location = new Point(241, 173);
+            chkJoinRelaxed.Location = new Point(241, 202);
             chkJoinRelaxed.Name = "chkJoinRelaxed";
             chkJoinRelaxed.Size = new Size(156, 19);
             chkJoinRelaxed.TabIndex = 8;
