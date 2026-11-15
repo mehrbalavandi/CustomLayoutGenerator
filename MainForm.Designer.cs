@@ -62,7 +62,7 @@
             // 
             // btnMerge
             // 
-            btnMerge.Location = new Point(12, 238);
+            btnMerge.Location = new Point(12, 273);
             btnMerge.Name = "btnMerge";
             btnMerge.Size = new Size(200, 23);
             btnMerge.TabIndex = 2;
@@ -72,7 +72,7 @@
             // 
             // btnApplyAndMerge
             // 
-            btnApplyAndMerge.Location = new Point(12, 189);
+            btnApplyAndMerge.Location = new Point(12, 200);
             btnApplyAndMerge.Name = "btnApplyAndMerge";
             btnApplyAndMerge.Size = new Size(200, 23);
             btnApplyAndMerge.TabIndex = 4;
@@ -82,18 +82,19 @@
             // 
             // btnJoin
             // 
-            btnJoin.Location = new Point(12, 41);
+            btnJoin.AutoSize = true;
+            btnJoin.Location = new Point(12, 169);
             btnJoin.Name = "btnJoin";
-            btnJoin.Size = new Size(200, 23);
+            btnJoin.Size = new Size(223, 25);
             btnJoin.TabIndex = 7;
-            btnJoin.Text = "ادغام پاراگراف‌های شکسته";
+            btnJoin.Text = "ادغام پاراگراف‌های شکسته شده";
             btnJoin.UseVisualStyleBackColor = true;
             btnJoin.Click += btnJoin_Click;
             // 
             // chkJoinRelaxed
             // 
             chkJoinRelaxed.AutoSize = true;
-            chkJoinRelaxed.Location = new Point(218, 45);
+            chkJoinRelaxed.Location = new Point(241, 173);
             chkJoinRelaxed.Name = "chkJoinRelaxed";
             chkJoinRelaxed.Size = new Size(156, 19);
             chkJoinRelaxed.TabIndex = 8;
@@ -112,16 +113,16 @@
             // 
             // txtSpeakers
             // 
-            txtSpeakers.Location = new Point(12, 99);
+            txtSpeakers.Location = new Point(12, 67);
             txtSpeakers.Name = "txtSpeakers";
-            txtSpeakers.Size = new Size(776, 84);
+            txtSpeakers.Size = new Size(776, 96);
             txtSpeakers.TabIndex = 10;
             txtSpeakers.Text = "";
             // 
             // label1
             // 
             label1.AutoSize = true;
-            label1.Location = new Point(12, 81);
+            label1.Location = new Point(12, 49);
             label1.Name = "label1";
             label1.Size = new Size(188, 15);
             label1.TabIndex = 11;
