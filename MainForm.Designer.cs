@@ -30,9 +30,13 @@
         {
             btnSelectFile = new Button();
             btnIndentLabels = new Button();
-            btnMergeSpeaker = new Button();
+            btnMerge = new Button();
             btnApplyAndMerge = new Button();
-            txtSpeakers = new TextBox();
+            btnJoin = new Button();
+            chkJoinRelaxed = new CheckBox();
+            btnFixCyrillic = new Button();
+            txtSpeakers = new RichTextBox();
+            label1 = new Label();
             SuspendLayout();
             // 
             // btnSelectFile
@@ -56,42 +60,85 @@
             btnIndentLabels.UseVisualStyleBackColor = true;
             btnIndentLabels.Click += btnIndentLabels_Click;
             // 
-            // btnMergeSpeaker
+            // btnMerge
             // 
-            btnMergeSpeaker.Location = new Point(12, 12);
-            btnMergeSpeaker.Name = "btnMergeSpeaker";
-            btnMergeSpeaker.Size = new Size(200, 23);
-            btnMergeSpeaker.TabIndex = 2;
-            btnMergeSpeaker.Text = "ادغام گوینده‌ها";
-            btnMergeSpeaker.UseVisualStyleBackColor = true;
-            btnMergeSpeaker.Click += btnMerge_Click;
+            btnMerge.Location = new Point(12, 238);
+            btnMerge.Name = "btnMerge";
+            btnMerge.Size = new Size(200, 23);
+            btnMerge.TabIndex = 2;
+            btnMerge.Text = "ادغام گوینده‌های دارای استایل";
+            btnMerge.UseVisualStyleBackColor = true;
+            btnMerge.Click += btnMerge_Click;
             // 
             // btnApplyAndMerge
             // 
-            btnApplyAndMerge.Location = new Point(12, 72);
+            btnApplyAndMerge.Location = new Point(12, 189);
             btnApplyAndMerge.Name = "btnApplyAndMerge";
             btnApplyAndMerge.Size = new Size(200, 23);
             btnApplyAndMerge.TabIndex = 4;
-            btnApplyAndMerge.Text = "تعریف و ادغام گوینده";
+            btnApplyAndMerge.Text = "اعمال استایل و ادغام گوینده‌ها";
             btnApplyAndMerge.UseVisualStyleBackColor = true;
             btnApplyAndMerge.Click += btnApplyAndMerge_Click;
             // 
+            // btnJoin
+            // 
+            btnJoin.Location = new Point(12, 41);
+            btnJoin.Name = "btnJoin";
+            btnJoin.Size = new Size(200, 23);
+            btnJoin.TabIndex = 7;
+            btnJoin.Text = "ادغام پاراگراف‌های شکسته";
+            btnJoin.UseVisualStyleBackColor = true;
+            btnJoin.Click += btnJoin_Click;
+            // 
+            // chkJoinRelaxed
+            // 
+            chkJoinRelaxed.AutoSize = true;
+            chkJoinRelaxed.Location = new Point(218, 45);
+            chkJoinRelaxed.Name = "chkJoinRelaxed";
+            chkJoinRelaxed.Size = new Size(156, 19);
+            chkJoinRelaxed.TabIndex = 8;
+            chkJoinRelaxed.Text = "حالت آزاد (برای متن فارسی)";
+            chkJoinRelaxed.UseVisualStyleBackColor = true;
+            // 
+            // btnFixCyrillic
+            // 
+            btnFixCyrillic.Location = new Point(12, 12);
+            btnFixCyrillic.Name = "btnFixCyrillic";
+            btnFixCyrillic.Size = new Size(200, 23);
+            btnFixCyrillic.TabIndex = 9;
+            btnFixCyrillic.Text = "اصلاح حروف سیریلیک";
+            btnFixCyrillic.UseVisualStyleBackColor = true;
+            btnFixCyrillic.Click += btnFixCyrillic_Click;
+            // 
             // txtSpeakers
             // 
-            txtSpeakers.Location = new Point(12, 101);
+            txtSpeakers.Location = new Point(12, 99);
             txtSpeakers.Name = "txtSpeakers";
-            txtSpeakers.PlaceholderText = "Examiner; Candidate; Student A";
-            txtSpeakers.Size = new Size(776, 23);
-            txtSpeakers.TabIndex = 6;
+            txtSpeakers.Size = new Size(776, 84);
+            txtSpeakers.TabIndex = 10;
+            txtSpeakers.Text = "";
+            // 
+            // label1
+            // 
+            label1.AutoSize = true;
+            label1.Location = new Point(12, 81);
+            label1.Name = "label1";
+            label1.Size = new Size(188, 15);
+            label1.TabIndex = 11;
+            label1.Text = "Examiner; Candidate; Student A, ...";
             // 
             // MainForm
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(800, 450);
+            Controls.Add(label1);
             Controls.Add(txtSpeakers);
+            Controls.Add(btnFixCyrillic);
+            Controls.Add(chkJoinRelaxed);
+            Controls.Add(btnJoin);
             Controls.Add(btnApplyAndMerge);
-            Controls.Add(btnMergeSpeaker);
+            Controls.Add(btnMerge);
             Controls.Add(btnIndentLabels);
             Controls.Add(btnSelectFile);
             Name = "MainForm";
@@ -104,8 +151,12 @@
 
         private Button btnSelectFile;
         private Button btnIndentLabels;
-        private Button btnMergeSpeaker;
+        private Button btnMerge;
         private Button btnApplyAndMerge;
-        private TextBox txtSpeakers;
+        private Button btnJoin;
+        private CheckBox chkJoinRelaxed;
+        private Button btnFixCyrillic;
+        private RichTextBox txtSpeakers;
+        private Label label1;
     }
 }

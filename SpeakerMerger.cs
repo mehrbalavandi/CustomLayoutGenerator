@@ -3,7 +3,7 @@ using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 
-namespace YourApp; // نام namespace را با پروژه‌ی خودتان یکی کنید
+namespace CustomLayoutGenerator; // نام namespace را با پروژه‌ی خودتان یکی کنید
 
 public static class SpeakerMerger
 {

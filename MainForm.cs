@@ -8,7 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
-using YourApp;
+using CustomLayoutGenerator;
 
 namespace CustomLayoutGenerator
 {
@@ -3556,10 +3556,10 @@ namespace CustomLayoutGenerator
             try
             {
                 Cursor = Cursors.WaitCursor;
-                int count = SpeakerMerger.MergeFile(inputPath, outputPath, "NotSpoken");
+                int merged = SpeakerMerger.MergeFile(inputPath, outputPath, "NotSpoken");
 
                 MessageBox.Show(
-                    $"تعداد پاراگراف‌های ادغام‌شده: {count}\n\nفایل خروجی:\n{outputPath}",
+                    $"تعداد پاراگراف‌های ادغام‌شده: {merged}\n\nفایل خروجی:\n{outputPath}",
                     "انجام شد", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (IOException ex)
@@ -3727,7 +3727,7 @@ namespace CustomLayoutGenerator
 
             string inputPath = dialog.FileName;
 
-            // خروجی کنار فایل اصلی با پسوند جدا ذخیره می‌شود تا خروجی دکمه‌ی اول بازنویسی نشود
+            // خروجی با پسوند جدا ذخیره می‌شود تا خروجی دکمه‌ی اول بازنویسی نشود
             string outputPath = Path.Combine(
                 Path.GetDirectoryName(inputPath)!,
                 Path.GetFileNameWithoutExtension(inputPath) + "_speakers.docx");
@@ -3742,6 +3742,108 @@ namespace CustomLayoutGenerator
                     $"تعداد پاراگراف‌های هم‌متن با مقادیر: {matched}\n" +
                     $"تعداد پاراگراف‌های ادغام‌شده: {merged}\n\n" +
                     $"فایل خروجی:\n{outputPath}",
+                    "انجام شد", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (IOException ex)
+            {
+                // معمولاً یعنی فایل در Word باز است
+                MessageBox.Show(
+                    "دسترسی به فایل ممکن نیست. اگر فایل در Word باز است آن را ببندید و دوباره تلاش کنید.\n\n" + ex.Message,
+                    "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
+            }
+        }
+
+        private void btnJoin_Click(object sender, EventArgs e)
+        {
+            // نام گوینده‌ها از همان TextBox دکمه‌ی دوم؛ این متن‌ها هرگز ادغام نمی‌شوند (خالی بودن مشکلی ندارد)
+            var protectedTexts = txtSpeakers.Text
+                .Split(new[] { ';', '؛' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .ToList();
+
+            // انتخاب فایل Word با OpenFileDialog
+            using var dialog = new OpenFileDialog
+            {
+                Title = "انتخاب فایل Word",
+                Filter = "Word Document (*.docx)|*.docx",
+                CheckFileExists = true,
+                Multiselect = false
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return; // کاربر انصراف داد
+
+            string inputPath = dialog.FileName;
+
+            // خروجی کنار فایل اصلی ذخیره می‌شود؛ فایل اصلی دست‌نخورده می‌ماند
+            string outputPath = Path.Combine(
+                Path.GetDirectoryName(inputPath)!,
+                Path.GetFileNameWithoutExtension(inputPath) + "_joined.docx");
+
+            var mode = chkJoinRelaxed.Checked ? JoinMode.Relaxed : JoinMode.Strict;
+
+            try
+            {
+                Cursor = Cursors.WaitCursor;
+                var report = ParagraphJoiner.JoinFile(
+                    inputPath, outputPath, mode, protectedTexts, new[] { "NotSpoken" });
+
+                MessageBox.Show(
+                    $"فایل خروجی:\n{outputPath}" + report.ToSummary(),
+                    "انجام شد", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (IOException ex)
+            {
+                // معمولاً یعنی فایل در Word باز است
+                MessageBox.Show(
+                    "دسترسی به فایل ممکن نیست. اگر فایل در Word باز است آن را ببندید و دوباره تلاش کنید.\n\n" + ex.Message,
+                    "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "خطا", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                Cursor = Cursors.Default;
+            }
+        }
+
+        private void btnFixCyrillic_Click(object sender, EventArgs e)
+        {
+            // انتخاب فایل Word با OpenFileDialog
+            using var dialog = new OpenFileDialog
+            {
+                Title = "انتخاب فایل Word",
+                Filter = "Word Document (*.docx)|*.docx",
+                CheckFileExists = true,
+                Multiselect = false
+            };
+
+            if (dialog.ShowDialog(this) != DialogResult.OK)
+                return; // کاربر انصراف داد
+
+            string inputPath = dialog.FileName;
+
+            // خروجی کنار فایل اصلی ذخیره می‌شود؛ فایل اصلی دست‌نخورده می‌ماند
+            string outputPath = Path.Combine(
+                Path.GetDirectoryName(inputPath)!,
+                Path.GetFileNameWithoutExtension(inputPath) + "_cyrillic_fixed.docx");
+
+            try
+            {
+                Cursor = Cursors.WaitCursor;
+                var report = CyrillicFileTool.FixFile(inputPath, outputPath);
+
+                MessageBox.Show(
+                    $"فایل خروجی:\n{outputPath}" + report.ToSummary(),
                     "انجام شد", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (IOException ex)
